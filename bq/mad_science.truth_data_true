@@ -1,0 +1,1 @@
+"select integer(rand()*100) bucket, * from\n(\nselect stid,segmentName,True as label from [mad_science.pixel_with_segments] where type=\"conversion\" group by stid, segmentName\n)"

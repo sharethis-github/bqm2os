@@ -1,0 +1,1 @@
+"select * from\n[mad_science.ml_as_category_feature]\n,[mad_science.ml_as_domain_feature]\n,[mad_science.ml_as_keywords_feature] "

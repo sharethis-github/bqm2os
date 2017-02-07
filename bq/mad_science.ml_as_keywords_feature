@@ -1,0 +1,1 @@
+"SELECT\n  stid,\n  estid,\n  mappedEvent,\n  geo.iso AS geo_iso,\n  \"kw\" AS feature_type,\n  keywords.text AS feature,\nFROM\n  FLATTEN((\n    SELECT\n      stid,\n      estid,\n      mappedEvent,\n      geo.ISO,\n      keywords.text\n    FROM\n      [mad_science.mergelog_view] \n      where float(keywords.score) > 0.4 ), keywords)"
