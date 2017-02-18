@@ -1,16 +1,13 @@
-#!/bin/bash
+#!/bin/bash -x
 
 set -e
 
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-cd $DIR
-pep8 /python/*.py
-pep8 /test/*.py
+cd $(dirname $0)
 
-#export PYTHONPATH=$DIR/src
-#coverage run -a --source=src/ test/test_run.py
-#coverage run -a --source=src/ test/test_bq.py
-#coverage run -a --source=src/ test/test_mongo.py
-#coverage run -a --source=src/ test/test_sqs.py
-#coverage run -a --source=src/ test/test_keyword_expansion.py
-#coverage report -m
+for file in $(find /python -name '*.py')
+do
+    pep8 $file
+    testfile=$(echo $file | awk -F/ '{printf "/test/"; n=3; while (n < NF) { printf $n"/"; n++}; print "test_"$NF}')
+    coverage run -a --source=/python $testfile
+    coverage report -m
+done

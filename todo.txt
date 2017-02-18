@@ -1,0 +1,20 @@
+# re-execute
+- when file definition is newer than created table
+- when any table I directly depend on is newer than my table
+
+# add ability to toggle execute legacy or ansi
+# expose all or most flags needed for query execution and saving query results
+
+# allow static table dependencies
+
+# allow for dag creation within airflow
+
+# allow for backfilling of tables
+
+# allow date templatized table names
+
+# maintain state via job queue
+
+# add a web app which shows state of jobs executing
+
+# support generating independ
