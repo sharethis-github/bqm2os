@@ -1,1 +1,0 @@
-"select estid, sqrt(sum_sq_p-2*sum_pu*sum_sq_u) distance from mad_science_distance.distance_util\n"

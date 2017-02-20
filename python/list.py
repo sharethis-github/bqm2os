@@ -1,11 +1,10 @@
 import optparse
+from genericpath import isfile
 from os import listdir
-import sys
 import re
-from rsrc.Rsrc import BqQueryBackedTableResource
+from rsrc.Rsrc import BqQueryBackedTableResource, BqJobs
 from os.path import getmtime
 from google.cloud import bigquery
-
 
 class FileLoader:
     def __init__(self):
@@ -14,6 +13,8 @@ class FileLoader:
     def load(self, file):
         pass
 
+    def handles(self, file):
+        pass
 
 class DelegatingFileSuffixLoader(FileLoader):
     """ Manages a map of loader keyed by file suffix """
@@ -39,6 +40,16 @@ class DelegatingFileSuffixLoader(FileLoader):
             raise ValueError("No loader associated with suffix: " +
                              suffixParts[-1])
 
+    def handles(self, file):
+        return self.suffix(file) in self.loaders.keys()
+
+    def suffix(self, file):
+        try:
+            return file.split("/")[-1].split(".")[-1]
+        except:
+            raise ValueError("Invalid file for loading: " + file + ". No suffix")
+
+
 
 class BqQueryFileLoader(FileLoader):
 
@@ -52,7 +63,7 @@ class BqQueryFileLoader(FileLoader):
         with open(filePath) as f:
             return BqQueryBackedTableResource(f.read(),
                                               dataset, table,
-                                              mtime, self.bqClient)
+                                              int(mtime*1000), self.bqClient)
 
 class DependencyBuilder:
     def __init__(self, loader):
@@ -62,34 +73,35 @@ class DependencyBuilder:
         """ folders arg is an array of strings which should point
         at folders containing reseource descriptions loadable by
         self.loader """
-        queryMap = {}
-        queryDependencies = {}
+        resources = {}
+        resourceDependencies = {}
         for folder in folders:
             folder = re.sub("/$", "", folder)
-            queryFiles = ["/".join([folder, x]) for x in listdir(folder)]
-            for q in queryFiles:
-                queryMap[q] = self.loader.load(q)
+            queryFile = []
+            for name in listdir(folder):
+                file = "/".join([folder, name])
+                if isfile(file) and self.loader.handles(file):
+                    rsrc = self.loader.load(file)
+                    resources[rsrc.key()] = rsrc
 
-            for q in queryMap.keys():
-                queryDependencies[q] = set([])
+            for rsrc in resources.values():
+                resourceDependencies[rsrc.key()] = set([])
 
-            for q in queryMap.keys():
-                dependant = re.sub(".sql", "", q)
-                tables = ["".join([" ", dependant, x, " "]) for x in ["", "_"]]
-                for table in tables:
-                    for dependant in queryMap.keys():
-                        filtered = re.sub('[^0-9a-zA-Z\._]+', ' ',
-                                          queryMap[dependant].query)
-                        if table in filtered:
-                            queryDependencies[dependant].add(q)
+            for rsrc in resources.values():
+                for osrc in resources.values():
+                    if rsrc.dependsOn(osrc):
+                        resourceDependencies[rsrc.key()].add(osrc.key())
 
-        return (queryMap, queryDependencies)
+        return (resources, resourceDependencies)
 
 class DependencyExecutor:
     """ """
     def __init__(self, resources, dependencies):
         self.resources = resources
         self.dependencies = dependencies
+
+    def show(self):
+        print(str(self.dependencies))
 
     def execute(self):
         while len(dependencies):
@@ -98,8 +110,14 @@ class DependencyExecutor:
                 if not len(dependencies[n]):
                     todel.add(n)
             for n in todel:
-                print("executing: ", n, resources[n])
-                resources[n].create()
+                if not resources[n].exists():
+                    print("executing: because it doesn't exist ", n, resources[n])
+                    resources[n].create()
+                elif resources[n].definitionTime() > resources[n].updateTime():
+                    print("executing: because its definition is newer than last created ",
+                          n, resources[n])
+                    resources[n].create()
+
                 del dependencies[n]
 
             for n in dependencies.keys():
@@ -111,8 +129,30 @@ class DependencyExecutor:
 
 
 if __name__ == "__main__":
+    parser = optparse.OptionParser("[options] folder[ folder2[...]]")
+    parser.add_option("--execute", dest="execute",
+                      action="store_true", default=False,
+                      help="Execute the dependencies found in the resources")
+    parser.add_option("--show", dest="show",
+                      action="store_true", default=False,
+                      help="Show the dependency tree")
+    parser.add_option("--showJobs", dest="showJobs",
+                      action="store_true", default=False,
+                      help="Show the jobs")
 
-    builder = DependencyBuilder(DelegatingFileSuffixLoader(query=BqQueryFileLoader(bigquery.Client())))
-    (resources, dependencies) = builder.buildDepend(sys.argv[1:])
+    (options, args) = parser.parse_args()
+
+    builder = DependencyBuilder(
+        DelegatingFileSuffixLoader(
+            query=BqQueryFileLoader(bigquery.Client())))
+    (resources, dependencies) = builder.buildDepend(args)
     executor = DependencyExecutor(resources, dependencies)
-    executor.execute()
+    if options.execute:
+        executor.execute()
+    elif options.show:
+        executor.show()
+    elif options.showJobs:
+        for j in BqJobs(bigquery.Client()).jobs():
+            print(j)
+    else:
+        parser.print_help()
