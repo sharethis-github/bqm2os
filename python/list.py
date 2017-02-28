@@ -2,7 +2,9 @@ import optparse
 from genericpath import isfile
 from os import listdir
 import re
-from rsrc.Rsrc import BqQueryBackedTableResource, BqJobs
+from time import sleep
+
+from rsrc.Rsrc import BqQueryBackedTableResource, BqViewBackedTableResource, BqJobs
 from os.path import getmtime
 from google.cloud import bigquery
 
@@ -65,6 +67,20 @@ class BqQueryFileLoader(FileLoader):
                                               dataset, table,
                                               int(mtime*1000), self.bqClient)
 
+class BqViewFileLoader(FileLoader):
+
+    def __init__(self, bqClient):
+        self.bqClient = bqClient
+
+    def load(self, filePath):
+        mtime = getmtime(filePath)
+        (dataset, table) = filePath.split("/")[-1].split(".")[:-1]
+
+        with open(filePath) as f:
+            return BqViewBackedTableResource(f.read(),
+                                              dataset, table,
+                                              int(mtime*1000), self.bqClient)
+
 class DependencyBuilder:
     def __init__(self, loader):
         self.loader = loader
@@ -110,13 +126,21 @@ class DependencyExecutor:
                 if not len(dependencies[n]):
                     todel.add(n)
             for n in todel:
+                if (resources[n].isRunning()):
+                    print("not executing: because we're running already", n)
+                    continue
                 if not resources[n].exists():
-                    print("executing: because it doesn't exist ", n, resources[n])
+                    print("executing: because it doesn't exist ", n)
                     resources[n].create()
                 elif resources[n].definitionTime() > resources[n].updateTime():
                     print("executing: because its definition is newer than last created ",
                           n, resources[n])
-                    resources[n].create()
+
+                ## can't delete dependency if we failed!
+                while resources[n].isRunning():
+                    print ("waiting for ",  n, "to finish")
+                    sleep(10)
+
 
                 del dependencies[n]
 
@@ -144,7 +168,8 @@ if __name__ == "__main__":
 
     builder = DependencyBuilder(
         DelegatingFileSuffixLoader(
-            query=BqQueryFileLoader(bigquery.Client())))
+            query=BqQueryFileLoader(bigquery.Client()),
+            view=BqViewFileLoader(bigquery.Client())))
     (resources, dependencies) = builder.buildDepend(args)
     executor = DependencyExecutor(resources, dependencies)
     if options.execute:
