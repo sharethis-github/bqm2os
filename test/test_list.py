@@ -1,6 +1,7 @@
 import unittest
 
-from list import DelegatingFileSuffixLoader, FileLoader
+from list import DelegatingFileSuffixLoader, FileLoader, parseDatasetTable, \
+    parseDataset, applyTemplate
 
 
 class Test(unittest.TestCase):
@@ -41,6 +42,30 @@ class Test(unittest.TestCase):
             return True
         aLoader.load = f
         self.assertTrue(DelegatingFileSuffixLoader(query=aLoader).load("nosuffixfile.query"))
+
+    def testParseDataSetTable(self):
+        v = parseDatasetTable("a/b/dataset.table.suffix")
+        self.assertEquals(v, ("dataset", "table"))
+
+    def testParseDataSetTableWithoutDataset(self):
+        v = parseDatasetTable("a/b/table.suffix", defaultDataset="dataset")
+        self.assertEquals(v, ("dataset", "table"))
+
+    def testParseDataSetTableWithoutDefaultDataset(self):
+        try:
+            parseDatasetTable("a/b/table.suffix")
+            self.assertTrue(False)
+        except:
+            pass
+
+    def testParseDataSet(self):
+        self.assertEquals(parseDataset("a/b/dataset.suffix"), "dataset")
+
+    def testApplyTemplate(self):
+        s="a template"
+        v=applyTemplate("a template", foo="bar")
+        self.assertEquals(s, v)
+
 
 if __name__ == '__main__':
     unittest.main()

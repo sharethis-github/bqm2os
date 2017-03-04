@@ -2,24 +2,32 @@ import optparse
 from genericpath import isfile
 from os import listdir
 import re
+from string import Formatter
 from time import sleep
 
-from rsrc.Rsrc import BqQueryBackedTableResource, BqViewBackedTableResource, BqJobs
+from rsrc.Rsrc import BqQueryBackedTableResource, \
+    BqViewBackedTableResource, BqJobs, BqDatasetBackedResource
 from os.path import getmtime
 from google.cloud import bigquery
+
 
 class FileLoader:
     def __init__(self):
         pass
 
+
     def load(self, file):
         pass
+
 
     def handles(self, file):
         pass
 
+
 class DelegatingFileSuffixLoader(FileLoader):
     """ Manages a map of loader keyed by file suffix """
+
+
     def __init__(self, **kwargs):
         if not len(kwargs):
             raise ValueError("Please specify one or more FileLoader")
@@ -27,6 +35,7 @@ class DelegatingFileSuffixLoader(FileLoader):
             if not issubclass(kwargs[key].__class__, FileLoader):
                 raise ValueError("args must be subclass of FileLoader")
             self.loaders = kwargs
+
 
     def load(self, file):
         suffixParts = file.split("/")[-1].split(".")
@@ -42,48 +51,114 @@ class DelegatingFileSuffixLoader(FileLoader):
             raise ValueError("No loader associated with suffix: " +
                              suffixParts[-1])
 
+
     def handles(self, file):
         return self.suffix(file) in self.loaders.keys()
+
 
     def suffix(self, file):
         try:
             return file.split("/")[-1].split(".")[-1]
         except:
-            raise ValueError("Invalid file for loading: " + file + ". No suffix")
+            raise ValueError(
+                "Invalid file for loading: " + file + ". No suffix")
 
 
+def parseDatasetTable(filePath, defaultDataset=None):
+    tokens = filePath.split("/")[-1].split(".")
+    if len(tokens) == 3:
+        return (tokens[0], tokens[1])
+    elif len(tokens) == 2:  # use default dataset
+        if not defaultDataset:
+            raise ValueError("Must specify a default dataset")
+        return (defaultDataset, tokens[0])
+    elif len(tokens) > 3:
+        raise ValueError("Invalid filename: " + filePath + ". File names "
+                                                           "must be of form "
+                                                           "dataset.table.suffix or table.suffix")
+
+
+def parseDataset(filePath):
+    """ Takes a file path and parses to dataset string"""
+    tokens = filePath.split("/")[-1].split(".")
+    if len(tokens) == 2:
+        return tokens[0]
+    else:
+        raise ValueError("Invalid filename: " + filePath +
+                         ". File names for datasets "
+                         "must be of form "
+                         "dataset.suffix")
 
 class BqQueryFileLoader(FileLoader):
-
-    def __init__(self, bqClient):
+    def __init__(self, bqClient, defaultDataset=None):
         self.bqClient = bqClient
+        self.defaultDataset = defaultDataset
+
 
     def load(self, filePath):
         mtime = getmtime(filePath)
-        (dataset, table) = filePath.split("/")[-1].split(".")[:-1]
+        (dataset, table) = parseDatasetTable(filePath, self.defaultDataset)
 
         with open(filePath) as f:
-            return BqQueryBackedTableResource(f.read(),
+            query = f.read().format(dataset=self.defaultDataset)
+            return BqQueryBackedTableResource(query,
                                               dataset, table,
-                                              int(mtime*1000), self.bqClient)
+                                              int(mtime * 1000),
+                                              self.bqClient)
+
+
+class BqDatasetFileLoader(FileLoader):
+    def __init__(self, bqClient, defaultDataset=None):
+        self.bqClient = bqClient
+        self.defaultDataset = defaultDataset
+
+
+    def load(self, filePath):
+        mtime = getmtime(filePath)
+        dataset = parseDataset(filePath, self.defaultDataset)
+        return BqDatasetBackedResource(dataset,
+                                       int(mtime * 1000),
+                                       self.bqClient)
+
 
 class BqViewFileLoader(FileLoader):
-
-    def __init__(self, bqClient):
+    def __init__(self, bqClient, defaultDataset=None):
         self.bqClient = bqClient
+        self.defaultDataset = defaultDataset
 
     def load(self, filePath):
         mtime = getmtime(filePath)
-        (dataset, table) = filePath.split("/")[-1].split(".")[:-1]
+        (dataset, table) = parseDatasetTable(filePath, self.defaultDataset)
 
         with open(filePath) as f:
-            return BqViewBackedTableResource(f.read(),
-                                              dataset, table,
-                                              int(mtime*1000), self.bqClient)
+            query = f.read().format(dataset=self.defaultDataset)
+            return BqViewBackedTableResource(query,
+                                             dataset, table,
+                                             int(mtime * 1000),
+                                             self.bqClient)
+
+
+class BqDataFileLoader(FileLoader):
+    def __init__(self, bqClient, defaultDataset=None):
+        self.bqClient = bqClient
+        self.defaultDataset = defaultDataset
+
+    def load(self, filePath):
+        mtime = getmtime(filePath)
+        (dataset, table) = parseDatasetTable(filePath, self.defaultDataset)
+
+        with open(filePath) as f:
+            query = f.read().format(dataset=self.defaultDataset)
+            return BqViewBackedTableResource(query,
+                                             dataset, table,
+                                             int(mtime * 1000),
+                                             self.bqClient)
+
 
 class DependencyBuilder:
     def __init__(self, loader):
         self.loader = loader
+
 
     def buildDepend(self, folders):
         """ folders arg is an array of strings which should point
@@ -110,14 +185,19 @@ class DependencyBuilder:
 
         return (resources, resourceDependencies)
 
+
 class DependencyExecutor:
     """ """
+
+
     def __init__(self, resources, dependencies):
         self.resources = resources
         self.dependencies = dependencies
 
+
     def show(self):
         print(str(self.dependencies))
+
 
     def execute(self):
         while len(dependencies):
@@ -127,29 +207,30 @@ class DependencyExecutor:
                     todel.add(n)
             for n in todel:
                 if (resources[n].isRunning()):
-                    print("not executing: because we're running already", n)
+                    print("not executing: because we're running already",
+                          n)
                     continue
                 if not resources[n].exists():
                     print("executing: because it doesn't exist ", n)
                     resources[n].create()
-                elif resources[n].definitionTime() > resources[n].updateTime():
-                    print("executing: because its definition is newer than last created ",
-                          n, resources[n])
-
-                ## can't delete dependency if we failed!
-                while resources[n].isRunning():
-                    print ("waiting for ",  n, "to finish")
-                    sleep(10)
-
-
-                del dependencies[n]
+                elif resources[n].definitionTime() > resources[
+                    n].updateTime():
+                    print(
+                        "executing: because its definition is newer than last created ",
+                        n, resources[n])
+                    resources[n].create()
+                else:
+                    del dependencies[n]
 
             for n in dependencies.keys():
                 torm = set([])
                 for k in dependencies[n]:
                     if k not in dependencies:
                         torm.add(k)
-                        dependencies[n] = dependencies[n] - torm
+
+                dependencies[n] = dependencies[n] - torm
+
+            sleep(60)
 
 
 if __name__ == "__main__":
@@ -163,13 +244,21 @@ if __name__ == "__main__":
     parser.add_option("--showJobs", dest="showJobs",
                       action="store_true", default=False,
                       help="Show the jobs")
+    parser.add_option("--defaultDataset", dest="defaultDataset",
+                      help="The default dataset which will be used if "
+                           "file definitions don't specify one")
 
     (options, args) = parser.parse_args()
 
+    kwargs = {"defaultDataset": options.defaultDataset}
+
     builder = DependencyBuilder(
         DelegatingFileSuffixLoader(
-            query=BqQueryFileLoader(bigquery.Client()),
-            view=BqViewFileLoader(bigquery.Client())))
+            query=BqQueryFileLoader(bigquery.Client(), **kwargs),
+            view=BqViewFileLoader(bigquery.Client(), **kwargs),
+            dataset=BqDatasetFileLoader(bigquery.Client(), **kwargs)
+                                        ))
+
     (resources, dependencies) = builder.buildDepend(args)
     executor = DependencyExecutor(resources, dependencies)
     if options.execute:
