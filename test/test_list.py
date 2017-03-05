@@ -1,7 +1,10 @@
 import unittest
 
+from google.cloud.bigquery.schema import SchemaField
+
 from list import DelegatingFileSuffixLoader, FileLoader, parseDatasetTable, \
-    parseDataset, applyTemplate
+    parseDataset, BqDataFileLoader
+from rsrc.Rsrc import BqDataLoadTableResource
 
 
 class Test(unittest.TestCase):
@@ -61,11 +64,11 @@ class Test(unittest.TestCase):
     def testParseDataSet(self):
         self.assertEquals(parseDataset("a/b/dataset.suffix"), "dataset")
 
-    def testApplyTemplate(self):
-        s="a template"
-        v=applyTemplate("a template", foo="bar")
-        self.assertEquals(s, v)
-
+    def testParseSchemaString(self):
+        expected = [SchemaField("a", "int"), SchemaField("b", "string")]
+        result = BqDataFileLoader("dummy").loadSchemaFromString("a:int,"
+                                                           "b:string")
+        self.assertEquals(expected, result)
 
 if __name__ == '__main__':
     unittest.main()

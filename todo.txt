@@ -25,3 +25,6 @@
 
 # support tables refering to themselves but only tables that refer to older tables
     - way to do this is ensure that tables exist oldest to youngest
+
+# generate dynamically dependency on dataset existing - maybe.  actually pretty small ask
+to require a dataset file also paves the way for add attributes to that dataset

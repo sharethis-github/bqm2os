@@ -2,11 +2,16 @@ import optparse
 from genericpath import isfile
 from os import listdir
 import re
-from string import Formatter
 from time import sleep
 
+import time
+
+from google.cloud.bigquery.schema import SchemaField
+from googleapiclient.http import MediaFileUpload
+
 from rsrc.Rsrc import BqQueryBackedTableResource, \
-    BqViewBackedTableResource, BqJobs, BqDatasetBackedResource
+    BqViewBackedTableResource, BqJobs, BqDatasetBackedResource, \
+    BqDataLoadTableResource
 from os.path import getmtime
 from google.cloud import bigquery
 
@@ -41,8 +46,8 @@ class DelegatingFileSuffixLoader(FileLoader):
         suffixParts = file.split("/")[-1].split(".")
         if len(suffixParts) == 1:
             raise ValueError(file +
-                             " must have suffix from one of " +
-                             str(self.loaders.keys())
+                             " must have suffix and be from one of " +
+                             str(self.loaders.keys()) + " to be processed"
                              )
 
         try:
@@ -147,13 +152,25 @@ class BqDataFileLoader(FileLoader):
         mtime = getmtime(filePath)
         (dataset, table) = parseDatasetTable(filePath, self.defaultDataset)
 
-        with open(filePath) as f:
-            query = f.read().format(dataset=self.defaultDataset)
-            return BqViewBackedTableResource(query,
-                                             dataset, table,
-                                             int(mtime * 1000),
-                                             self.bqClient)
+        with open(filePath+".schema") as schemaFile:
+            schema = self.loadSchemaFromString(schemaFile.read().strip())
 
+        return BqDataLoadTableResource(filePath, dataset, table, schema,
+                                       int(mtime * 1000), self.bqClient)
+    def loadSchemaFromString(self, schema: str):
+        """ only support simple schema for i.e. not json just cmd line
+        like format """
+        try:
+            ret = []
+            for s in schema.split(","):
+                (col, type) = s.split(":", maxsplit=2)
+                ret.append(SchemaField(col, type))
+            return ret
+        except ValueError:
+            raise Exception("Schema string should follow format "
+                            "col:type," +
+                            "col2:type...json schema not supported at "
+                            "the moment")
 
 class DependencyBuilder:
     def __init__(self, loader):
@@ -188,7 +205,6 @@ class DependencyBuilder:
 
 class DependencyExecutor:
     """ """
-
 
     def __init__(self, resources, dependencies):
         self.resources = resources
@@ -256,8 +272,10 @@ if __name__ == "__main__":
         DelegatingFileSuffixLoader(
             query=BqQueryFileLoader(bigquery.Client(), **kwargs),
             view=BqViewFileLoader(bigquery.Client(), **kwargs),
-            dataset=BqDatasetFileLoader(bigquery.Client(), **kwargs)
-                                        ))
+            dataset=BqDatasetFileLoader(bigquery.Client(), **kwargs),
+            localdata=BqDataFileLoader(bigquery.Client(), **kwargs)
+
+    ))
 
     (resources, dependencies) = builder.buildDepend(args)
     executor = DependencyExecutor(resources, dependencies)

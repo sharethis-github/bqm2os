@@ -2,10 +2,24 @@ import uuid
 import re
 
 from google.cloud.bigquery import table
+from google.cloud.bigquery.client import Client
 from google.cloud.bigquery.dataset import Dataset
 from google.cloud.bigquery.job import WriteDisposition
 import time
 
+from google.cloud.bigquery.schema import SchemaField
+from google.cloud.bigquery.table import Table
+
+
+def wait_for_job(job):
+    while True:
+        job.reload()  # Refreshes the state via a GET request.
+        print("waiting for job", job)
+        if job.state == 'DONE':
+            if job.error_result:
+                raise RuntimeError(job.errors)
+            return
+        time.sleep(1)
 
 class Resource:
     def __init__(self):
@@ -37,7 +51,7 @@ class Resource:
 
 
 class BqJobs:
-    def __init__(self, bqClient):
+    def __init__(self, bqClient: Client):
         self.bqClient = bqClient
 
 
@@ -46,8 +60,9 @@ class BqJobs:
 
 
 class BqDatasetBackedResource(Resource):
-    def __init__(self, dataset,
-                 defTime, bqClient):
+    """ Resource for ensuring existence of dataset """
+    def __init__(self, dataset: str,
+                 defTime: int, bqClient: Client):
         self.dataset = dataset
         self.bqClient = bqClient
         self.defTime = defTime
@@ -89,13 +104,81 @@ class BqDatasetBackedResource(Resource):
 
 
     def __str__(self):
-        return ".".join([self.dataset, self.viewName, self.query])
+        return ".".join([self.dataset])
+
+
+class BqDataLoadTableResource(Resource):
+    def __init__(self, file: str, dataset: str,
+                 tableName: str, schema: tuple, defTime: int,
+                 bqClient: Client):
+        """ """
+        self.file = file
+        self.dataset = dataset
+        self.tableName = tableName
+        self.bqClient = bqClient
+        self.schema = schema
+        self.defTime = defTime
+
+
+    def exists(self):
+        return table.Table(self.tableName,
+                           Dataset(self.dataset, self.bqClient)) \
+            .exists(self.bqClient)
+
+
+    def updateTime(self):
+        ### time in milliseconds.  None if not created """
+        t = table.Table(self.tableName, self.bqClient.dataset(self.dataset))
+        t.reload()
+        createdTime = t.modified
+        if createdTime: return int(createdTime.strftime("%s")) * 1000
+        return None
+
+
+    def definitionTime(self):
+        """ Time in milliseconds """
+        return self.defTime
+
+
+    def create(self):
+        # SCHEMA = [
+        #     SchemaField('id', 'STRING', mode='required'),
+        #     SchemaField('desc', 'STRING', mode='required')
+        # ]
+        #
+        table = self.bqClient.dataset(self.dataset).table(self.tableName,
+                                                            self.schema)
+        if (table.exists()):
+            table.delete()
+        table.create()
+        with open(self.file, 'rb') as readable:
+            ret = table.upload_from_file(
+                readable, source_format='CSV', field_delimiter='\t')
+            wait_for_job(ret)
+
+    def key(self):
+        return ".".join([self.dataset, self.tableName])
+
+
+    def dependsOn(self, resource: Resource):
+        return False
+
+
+    def isRunning(self):
+        return False
+
+    def __str__(self):
+        return ".".join([self.dataset, self.tableName, self.query])
+
+def makeJobName(parts: list):
+    return "-".join(parts + [str(uuid.uuid4())])
 
 
 class BqViewBackedTableResource(Resource):
-    def __init__(self, query, dataset,
-                 tableName, defTime, bqClient,
+    def __init__(self, query: str, dataset: str,
+                 tableName:str, defTime: int, bqClient: Client,
                  ):
+
         self.query = query
         self.dataset = dataset
         self.viewName = tableName
@@ -150,8 +233,8 @@ class BqViewBackedTableResource(Resource):
 
 
 class BqQueryBackedTableResource(Resource):
-    def __init__(self, query, dataset,
-                 tableName, defTime, bqClient,
+    def __init__(self, query: str, dataset: str,
+                 tableName: str, defTime: int, bqClient: Client,
                  ):
         self.query = query
         self.dataset = dataset
@@ -185,6 +268,7 @@ class BqQueryBackedTableResource(Resource):
         jobid = "-".join(["create", self.dataset,
                           self.tableName, str(uuid.uuid4())])
         query_job = self.bqClient.run_async_query(jobid, self.query)
+        # todo - allow standard
         # Use standard SQL syntax for queries.
         # See: https://cloud.google.com/bigquery/sql-reference/
         query_job.use_legacy_sql = True
@@ -194,20 +278,6 @@ class BqQueryBackedTableResource(Resource):
                                                     self.bqClient))
         query_job.write_disposition = WriteDisposition.WRITE_TRUNCATE
         query_job.begin()
-
-
-    #        self.wait_for_job(query_job)
-
-    def wait_for_job(self, job):
-        while True:
-            job.reload()  # Refreshes the state via a GET request.
-            print("waiting for job", job)
-            if job.state == 'DONE':
-                if job.error_result:
-                    raise RuntimeError(job.errors)
-                return
-            time.sleep(1)
-
 
     def key(self):
         return ".".join([self.dataset, self.tableName])
