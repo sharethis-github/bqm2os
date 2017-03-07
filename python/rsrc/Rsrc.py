@@ -1,13 +1,11 @@
 import uuid
 import re
 
-from google.cloud.bigquery import table
 from google.cloud.bigquery.client import Client
 from google.cloud.bigquery.dataset import Dataset
 from google.cloud.bigquery.job import WriteDisposition, CopyJob, \
     QueryPriority, QueryJob
 import time
-
 from google.cloud.bigquery.table import Table
 
 
@@ -52,20 +50,19 @@ class BqJobs:
 
 class BqDatasetBackedResource(Resource):
     """ Resource for ensuring existence of dataset """
-    def __init__(self, dataset: str,
+    def __init__(self, dataset: Dataset,
                  defTime: int, bqClient: Client):
         self.dataset = dataset
         self.bqClient = bqClient
         self.defTime = defTime
 
     def exists(self):
-        return Dataset(self.dataset, self.bqClient).exists(self.bqClient)
+        return self.dataset.exists()
 
     def updateTime(self):
         """ time in milliseconds.  None if not created """
-        t = Dataset(self.dataset, self.bqClient)
-        t.reload()
-        createdTime = t.modified
+        self.dataset.reload()
+        createdTime = self.dataset.modified
         if createdTime:
             return int(createdTime.strftime("%s")) * 1000
         return None
@@ -79,7 +76,7 @@ class BqDatasetBackedResource(Resource):
         t.create(self.bqClient)
 
     def key(self):
-        return self.dataset
+        return self.dataset.name
 
     def dependsOn(self, resource):
         return False
@@ -176,11 +173,8 @@ class BqViewBackedTableResource(Resource):
     def key(self):
         return ".".join([self.table.dataset_name, self.table.name])
 
-    def dependsOn(self, resource):
-        if self == resource:
-            return False
-        legacyBqQueryDependsOn(resource, self.query) or \
-        strictSubstring(resource.key(), self.key())
+    def dependsOn(self, other: Resource):
+        return legacyBqQueryDependsOn(self, other, self.query)
 
     def isRunning(self):
         return False
@@ -190,16 +184,30 @@ class BqViewBackedTableResource(Resource):
                          "${query}"])
 
 
-def legacyBqQueryDependsOn(self: Resource, resource: Resource, query: str):
-    if self == resource:
+def legacyBqQueryDependsOn(me: Resource, other: Resource, query: str):
+    if me == other:
         return False
 
     filtered = re.sub('[^0-9a-zA-Z\._]+', ' ', query)
-    return strictSubstring(" ".join(["", resource.key(), ""]), filtered) \
-           or strictSubstring(resource.key(), self.key())
+    if strictSubstring(" ".join(["", other.key(), ""]), filtered):
+        return True
+
+    # we need a better way!
+    # other may be simply a dataset in which case it will have not
+        # .query field
+    if isinstance(other, BqDatasetBackedResource) \
+            and strictSubstring(other.key(), me.key()):
+        return True
+    return False
+
+    # \ or strictSubstring(other.key(), me.key())
 
 
 def strictSubstring(contained, container):
+    """
+
+    :rtype: bool
+    """
     return contained in container and len(contained) < len(container)
 
 
@@ -246,10 +254,8 @@ class BqQueryBackedTableResource(Resource):
     def key(self):
         return ".".join([self.table.dataset_name, self.table.name])
 
-    def dependsOn(self, resource):
-        return legacyBqQueryDependsOn(resource, self.query)
-        # filtered = re.sub('[^0-9a-zA-Z\._]+', ' ', self.query)
-        # return resource.key() in filtered
+    def dependsOn(self, other):
+        return legacyBqQueryDependsOn(self, other, self.query)
 
     def isRunning(self):
         if self.queryJob:
