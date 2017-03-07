@@ -28,3 +28,6 @@
 
 # generate dynamically dependency on dataset existing - maybe.  actually pretty small ask
 to require a dataset file also paves the way for add attributes to that dataset
+
+# the cmd line bq load command has some ability to dynamically detect schema.  we may want to 
+try to use that in the api

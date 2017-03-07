@@ -6,6 +6,7 @@ from time import sleep
 
 import time
 
+from google.cloud.bigquery.client import Client
 from google.cloud.bigquery.schema import SchemaField
 from googleapiclient.http import MediaFileUpload
 
@@ -95,7 +96,7 @@ def parseDataset(filePath):
                          "dataset.suffix")
 
 class BqQueryFileLoader(FileLoader):
-    def __init__(self, bqClient, defaultDataset=None):
+    def __init__(self, bqClient: Client, defaultDataset=None):
         self.bqClient = bqClient
         self.defaultDataset = defaultDataset
 
@@ -106,10 +107,10 @@ class BqQueryFileLoader(FileLoader):
 
         with open(filePath) as f:
             query = f.read().format(dataset=self.defaultDataset)
-            return BqQueryBackedTableResource(query,
-                                              dataset, table,
+            bqTable = self.bqClient.dataset(dataset).table(table)
+            return BqQueryBackedTableResource(query, bqTable,
                                               int(mtime * 1000),
-                                              self.bqClient)
+                                              self.bqClient, queryJob=None)
 
 
 class BqDatasetFileLoader(FileLoader):
@@ -127,7 +128,7 @@ class BqDatasetFileLoader(FileLoader):
 
 
 class BqViewFileLoader(FileLoader):
-    def __init__(self, bqClient, defaultDataset=None):
+    def __init__(self, bqClient: Client, defaultDataset=None):
         self.bqClient = bqClient
         self.defaultDataset = defaultDataset
 
@@ -137,14 +138,14 @@ class BqViewFileLoader(FileLoader):
 
         with open(filePath) as f:
             query = f.read().format(dataset=self.defaultDataset)
-            return BqViewBackedTableResource(query,
-                                             dataset, table,
+            bqTable = self.bqClient.dataset(dataset).table(table)
+            return BqViewBackedTableResource(query, bqTable,
                                              int(mtime * 1000),
                                              self.bqClient)
 
 
 class BqDataFileLoader(FileLoader):
-    def __init__(self, bqClient, defaultDataset=None):
+    def __init__(self, bqClient: Client, defaultDataset=None):
         self.bqClient = bqClient
         self.defaultDataset = defaultDataset
 
@@ -155,7 +156,8 @@ class BqDataFileLoader(FileLoader):
         with open(filePath+".schema") as schemaFile:
             schema = self.loadSchemaFromString(schemaFile.read().strip())
 
-        return BqDataLoadTableResource(filePath, dataset, table, schema,
+        bqTable = self.bqClient.dataset(dataset).table(table)
+        return BqDataLoadTableResource(filePath, bqTable, schema,
                                        int(mtime * 1000), self.bqClient)
     def loadSchemaFromString(self, schema: str):
         """ only support simple schema for i.e. not json just cmd line
@@ -185,7 +187,6 @@ class DependencyBuilder:
         resourceDependencies = {}
         for folder in folders:
             folder = re.sub("/$", "", folder)
-            queryFile = []
             for name in listdir(folder):
                 file = "/".join([folder, name])
                 if isfile(file) and self.loader.handles(file):
@@ -212,16 +213,39 @@ class DependencyExecutor:
 
 
     def show(self):
-        print(str(self.dependencies))
+        for (k, s) in sorted(self.dependencies.items()):
+            if len(s):
+                msg = " ".join([x for x in sorted(s)])
+            else:
+                msg = "nothing"
 
+            print (k, "depends on", msg)
 
-    def execute(self):
         while len(dependencies):
             todel = set([])
-            for n in dependencies.keys():
+            for n in sorted(dependencies.keys()):
                 if not len(dependencies[n]):
                     todel.add(n)
-            for n in todel:
+                    print("would execute", n)
+                    del dependencies[n]
+
+            for n in sorted(dependencies.keys()):
+                torm = set([])
+                for k in dependencies[n]:
+                    if k not in dependencies:
+                        torm.add(k)
+
+                dependencies[n] = dependencies[n] - torm
+
+
+    def execute(self, checkFrequency=10):
+        while len(dependencies):
+            todel = set([])
+            for n in sorted(dependencies.keys()):
+                if not len(dependencies[n]):
+                    todel.add(n)
+
+            for n in sorted(todel):
                 if (resources[n].isRunning()):
                     print("not executing: because we're running already",
                           n)
@@ -231,23 +255,26 @@ class DependencyExecutor:
                     resources[n].create()
                 elif resources[n].definitionTime() > resources[
                     n].updateTime():
-                    print(
-                        "executing: because its definition is newer than last created ",
-                        n, resources[n])
+                    print("executing: because its definition is newer "
+                          "than last created ",
+                          n, resources[n])
+                    if resources[n].hasFailed():
+                        print ("job failed before")
                     resources[n].create()
                 else:
+                    print (resources[n], " resource exists and is up to "
+                                         "date")
                     del dependencies[n]
 
-            for n in dependencies.keys():
+            for n in sorted(dependencies.keys()):
                 torm = set([])
                 for k in dependencies[n]:
                     if k not in dependencies:
                         torm.add(k)
 
                 dependencies[n] = dependencies[n] - torm
-
-            sleep(60)
-
+            if len(dependencies):
+                sleep(checkFrequency)
 
 if __name__ == "__main__":
     parser = optparse.OptionParser("[options] folder[ folder2[...]]")
@@ -263,6 +290,10 @@ if __name__ == "__main__":
     parser.add_option("--defaultDataset", dest="defaultDataset",
                       help="The default dataset which will be used if "
                            "file definitions don't specify one")
+    parser.add_option("--checkFrequency", dest="checkFrequency", type=int,
+                      default=10,
+                      help="The loop interval between dependency tree"
+                           " evaluation runs")
 
     (options, args) = parser.parse_args()
 
