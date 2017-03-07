@@ -237,7 +237,6 @@ class DependencyExecutor:
 
                 dependencies[n] = dependencies[n] - torm
 
-
     def execute(self, checkFrequency=10):
         while len(dependencies):
             todel = set([])
@@ -253,13 +252,11 @@ class DependencyExecutor:
                 if not resources[n].exists():
                     print("executing: because it doesn't exist ", n)
                     resources[n].create()
-                elif resources[n].definitionTime() > resources[
-                    n].updateTime():
+                elif resources[n].definitionTime() \
+                        > resources[n].updateTime():
                     print("executing: because its definition is newer "
                           "than last created ",
                           n, resources[n])
-                    if resources[n].hasFailed():
-                        print ("job failed before")
                     resources[n].create()
                 else:
                     print (resources[n], " resource exists and is up to "
@@ -273,6 +270,7 @@ class DependencyExecutor:
                         torm.add(k)
 
                 dependencies[n] = dependencies[n] - torm
+
             if len(dependencies):
                 sleep(checkFrequency)
 
@@ -298,6 +296,7 @@ if __name__ == "__main__":
     (options, args) = parser.parse_args()
 
     kwargs = {"defaultDataset": options.defaultDataset}
+
 
     builder = DependencyBuilder(
         DelegatingFileSuffixLoader(

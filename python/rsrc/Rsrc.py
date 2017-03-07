@@ -137,13 +137,12 @@ class BqDataLoadTableResource(Resource):
 
 
     def create(self):
-        if (self.table.exists()):
-            self.table.delete()
         self.table.schema = self.schema
-        self.table.create()
+        # self.table.create()
         with open(self.file, 'rb') as readable:
             ret = self.table.upload_from_file(
-                readable, source_format='CSV', field_delimiter='\t')
+                readable, source_format='CSV', field_delimiter='\t',
+                write_disposition=WriteDisposition.WRITE_TRUNCATE)
             wait_for_job(ret)
 
     def key(self):
