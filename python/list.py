@@ -21,10 +21,8 @@ class FileLoader:
     def __init__(self):
         pass
 
-
     def load(self, file):
         pass
-
 
     def handles(self, file):
         pass
@@ -32,7 +30,6 @@ class FileLoader:
 
 class DelegatingFileSuffixLoader(FileLoader):
     """ Manages a map of loader keyed by file suffix """
-
 
     def __init__(self, **kwargs):
         if not len(kwargs):
@@ -42,7 +39,6 @@ class DelegatingFileSuffixLoader(FileLoader):
                 raise ValueError("args must be subclass of FileLoader")
             self.loaders = kwargs
 
-
     def load(self, file):
         suffixParts = file.split("/")[-1].split(".")
         if len(suffixParts) == 1:
@@ -50,17 +46,14 @@ class DelegatingFileSuffixLoader(FileLoader):
                              " must have suffix and be from one of " +
                              str(self.loaders.keys()) + " to be processed"
                              )
-
         try:
             return self.loaders[suffixParts[-1]].load(file)
         except KeyError:
             raise ValueError("No loader associated with suffix: " +
                              suffixParts[-1])
 
-
     def handles(self, file):
         return self.suffix(file) in self.loaders.keys()
-
 
     def suffix(self, file):
         try:
@@ -79,9 +72,10 @@ def parseDatasetTable(filePath, defaultDataset=None):
             raise ValueError("Must specify a default dataset")
         return (defaultDataset, tokens[0])
     elif len(tokens) > 3:
-        raise ValueError("Invalid filename: " + filePath + ". File names "
-                                                           "must be of form "
-                                                           "dataset.table.suffix or table.suffix")
+        raise ValueError("Invalid filename: " + filePath +
+                         ". File names "
+                         "must be of form "
+                         "dataset.table.suffix or table.suffix")
 
 
 def parseDataset(filePath):
@@ -95,11 +89,11 @@ def parseDataset(filePath):
                          "must be of form "
                          "dataset.suffix")
 
+
 class BqQueryFileLoader(FileLoader):
     def __init__(self, bqClient: Client, defaultDataset=None):
         self.bqClient = bqClient
         self.defaultDataset = defaultDataset
-
 
     def load(self, filePath):
         mtime = getmtime(filePath)
@@ -117,7 +111,6 @@ class BqDatasetFileLoader(FileLoader):
     def __init__(self, bqClient, defaultDataset=None):
         self.bqClient = bqClient
         self.defaultDataset = defaultDataset
-
 
     def load(self, filePath):
         mtime = getmtime(filePath)
@@ -159,9 +152,11 @@ class BqDataFileLoader(FileLoader):
         bqTable = self.bqClient.dataset(dataset).table(table)
         return BqDataLoadTableResource(filePath, bqTable, schema,
                                        int(mtime * 1000), self.bqClient)
+
     def loadSchemaFromString(self, schema: str):
         """ only support simple schema for i.e. not json just cmd line
         like format """
+
         try:
             ret = []
             for s in schema.split(","):
@@ -174,10 +169,10 @@ class BqDataFileLoader(FileLoader):
                             "col2:type...json schema not supported at "
                             "the moment")
 
+
 class DependencyBuilder:
     def __init__(self, loader):
         self.loader = loader
-
 
     def buildDepend(self, folders):
         """ folders arg is an array of strings which should point
@@ -211,7 +206,6 @@ class DependencyExecutor:
         self.resources = resources
         self.dependencies = dependencies
 
-
     def show(self):
         for (k, s) in sorted(self.dependencies.items()):
             if len(s):
@@ -219,7 +213,7 @@ class DependencyExecutor:
             else:
                 msg = "nothing"
 
-            print (k, "depends on", msg)
+            print(k, "depends on", msg)
 
         while len(dependencies):
             todel = set([])
@@ -259,14 +253,18 @@ class DependencyExecutor:
                           n, resources[n])
                     resources[n].create()
                 else:
-                    print (resources[n], " resource exists and is up to "
-                                         "date")
+                    print(resources[n], " resource exists and is up to "
+                          "date")
                     del dependencies[n]
 
             for n in sorted(dependencies.keys()):
                 torm = set([])
                 for k in dependencies[n]:
                     if k not in dependencies:
+                        kDateTime = resources[k].updateTime()
+                        if kDateTime > resources[n].definitionTime():
+                            resources[n].defTime = kDateTime
+                            print("Updated defTime!", resources[n])
                         torm.add(k)
 
                 dependencies[n] = dependencies[n] - torm
@@ -297,15 +295,12 @@ if __name__ == "__main__":
 
     kwargs = {"defaultDataset": options.defaultDataset}
 
-
     builder = DependencyBuilder(
         DelegatingFileSuffixLoader(
             query=BqQueryFileLoader(bigquery.Client(), **kwargs),
             view=BqViewFileLoader(bigquery.Client(), **kwargs),
             dataset=BqDatasetFileLoader(bigquery.Client(), **kwargs),
-            localdata=BqDataFileLoader(bigquery.Client(), **kwargs)
-
-    ))
+            localdata=BqDataFileLoader(bigquery.Client(), **kwargs)))
 
     (resources, dependencies) = builder.buildDepend(args)
     executor = DependencyExecutor(resources, dependencies)
