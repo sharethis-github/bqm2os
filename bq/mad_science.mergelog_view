@@ -1,1 +1,0 @@
-"select * from (select * from \ntable_date_range_strict(mergelog.v1_,\ndate_add(current_timestamp(), -31, 'DAY'),\ndate_add(current_timestamp(), -1, 'DAY')))\nwhere stid in (select stid from mad_science_exec.truth_data_all)"

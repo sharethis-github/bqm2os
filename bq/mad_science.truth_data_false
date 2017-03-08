@@ -1,1 +1,0 @@
-"select integer(rand()*100) bucket, * from\n(\nselect a.stid as stid, a.segmentName as segmentName, False as label from\n(\nselect * from [mad_science.pixel_with_segments] where type=\"retarg\"\n) a left join\n(\nselect * from [mad_science.pixel_with_segments] where type=\"conversion\"\n) b on\na.stid=b.stid and a.segmentName=b.segmentName\ngroup by stid, segmentName\n)"

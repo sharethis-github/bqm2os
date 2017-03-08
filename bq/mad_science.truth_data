@@ -1,1 +1,0 @@
-"select * from [mad_science.truth_data_true] , [mad_science.truth_data_false] "

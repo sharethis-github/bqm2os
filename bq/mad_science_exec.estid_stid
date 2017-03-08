@@ -1,1 +1,0 @@
-"select estid,truth.stid stid from [mad_science_exec.feature_user_soe_c] all join\n[mad_science_exec.truth_data] truth\non \nall.stid=truth.stid\ngroup by estid,stid"

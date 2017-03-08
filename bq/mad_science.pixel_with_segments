@@ -1,1 +1,0 @@
-"select p.stid as stid, s.segmentName as segmentName, p.type as type \nfrom (select * from\ntable_date_range_strict(pixel.pixel_with_audience, \ndate_add(current_timestamp(), -30, 'DAY'),\ndate_add(current_timestamp(), -1, 'DAY'))) as p\njoin\n[mad_science.segments] as s on\np.audienceName = s.audienceName\nand\np.type = s.type\nwhere p.stid is not null"

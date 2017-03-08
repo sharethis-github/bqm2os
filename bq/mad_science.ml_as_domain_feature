@@ -1,1 +1,0 @@
-"SELECT\n  stid,\n  estid,\n  mappedEvent,\n  geo.iso AS geo_iso,\n  \"domain\" AS feature_type,\n  domain AS feature\nFROM [mad_science.mergelog_view]\nwhere domain is not null"
