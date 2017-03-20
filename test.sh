@@ -4,7 +4,8 @@ set -e
 
 cd $(dirname $0)
 
-. ./build.sh
+. env.sh
 
+docker build -t $imagename:$current_commit .
 #test
-docker run -v $(pwd)/test/:/test --rm $imagename:$HASH /test/test.sh
+docker run -v $(pwd)/test/:/test --rm $imagename:$current_commit /test/test.sh
