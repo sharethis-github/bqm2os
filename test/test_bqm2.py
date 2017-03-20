@@ -1,10 +1,13 @@
 import unittest
 
 from google.cloud.bigquery.schema import SchemaField
+import mock
+from mock.mock import MagicMock
 
-from list import DelegatingFileSuffixLoader, FileLoader, parseDatasetTable, \
+from bqm2 import DelegatingFileSuffixLoader, FileLoader, \
+    parseDatasetTable, \
     parseDataset, BqDataFileLoader
-from rsrc.Rsrc import BqDataLoadTableResource
+from resource import BqDataLoadTableResource
 
 
 class Test(unittest.TestCase):
@@ -46,17 +49,23 @@ class Test(unittest.TestCase):
         aLoader.load = f
         self.assertTrue(DelegatingFileSuffixLoader(query=aLoader).load("nosuffixfile.query"))
 
-    def testParseDataSetTable(self):
-        v = parseDatasetTable("a/b/dataset.table.suffix")
-        self.assertEquals(v, ("dataset", "table"))
+    @mock.patch('google.cloud.bigquery.Client')
+    def testParseDataSetTable(self, mock_client: MagicMock):
+        parseDatasetTable("a/b/dataset.table.suffix", "default",
+                              mock_client)
+        mock_client.dataset.assert_called_with('dataset')
+        mock_client.dataset().table.assert_called_with('table')
 
-    def testParseDataSetTableWithoutDataset(self):
-        v = parseDatasetTable("a/b/table.suffix", defaultDataset="dataset")
-        self.assertEquals(v, ("dataset", "table"))
+    @mock.patch('google.cloud.bigquery.Client')
+    def testParseDataSetTableWithoutDataset(self, mock_client: MagicMock):
+        parseDatasetTable("a/b/table.suffix", "dataset", mock_client)
+        mock_client.dataset.assert_called_with('dataset')
+        mock_client.dataset().table.assert_called_with('table')
 
-    def testParseDataSetTableWithoutDefaultDataset(self):
+    @mock.patch('google.cloud.bigquery.Client')
+    def testParseDataSetTableWithoutDefaultDataset(self, mock_client):
         try:
-            parseDatasetTable("a/b/table.suffix")
+            parseDatasetTable("a/b/table.suffix", None, mock_client)
             self.assertTrue(False)
         except:
             pass

@@ -1,8 +1,13 @@
-# re-execute
+# cancel running jobs whose local definitions or upstream dependencies have changed
+
+# need to parse unmanaged dependencies as well as managed tependencies
+# add exponential back off for failed jobs
+
+# re-execute - DONE
 - when file definition is newer than created table
 - when any table I directly depend on is newer than my table
 
-# add ability to toggle execute legacy or ansi
+# add ability to toggle execute legacy or ansi - DONE - can use the # directives
 # expose all or most flags needed for query execution and saving query results
 
 # allow static table dependencies
@@ -31,3 +36,9 @@ to require a dataset file also paves the way for add attributes to that dataset
 
 # the cmd line bq load command has some ability to dynamically detect schema.  we may want to 
 try to use that in the api
+
+
+# integration tests
+1. test table create when does not exist
+   when overwritings
+    when overwriting and changing schema
