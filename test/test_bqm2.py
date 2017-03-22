@@ -7,7 +7,6 @@ from mock.mock import MagicMock
 from bqm2 import DelegatingFileSuffixLoader, FileLoader, \
     parseDatasetTable, \
     parseDataset, BqDataFileLoader
-from resource import BqDataLoadTableResource
 
 
 class Test(unittest.TestCase):

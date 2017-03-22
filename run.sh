@@ -9,8 +9,8 @@ cd $(dirname $0)
 docker build -t $imagename:$current_commit .
 
 docker run -e GOOGLE_APPLICATION_CREDENTIALS=/gcloud-private-key \
--v ~/src/config/templates/secrets/int/gcloud-json/bqm2-gcloud-private-key:/gcloud-private-key \
--v ~/src/taxonomy-mapping/:/taxonomy-mapping/ \
+-v ~/src/config/templates/secrets/int/bqm2-json/bqm2-gcloud-private-key:/gcloud-private-key \
+-v ~/src/taxonomy-mapping/:/mnt/templates \
 -v ~/.vimrc:/root/.vimrc \
 --name bqm2 -v ~/.config:/root/.config \
 -v $(pwd)/python:/python \
