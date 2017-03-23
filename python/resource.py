@@ -80,7 +80,7 @@ def _buildDataSetKey_(table: Table) -> str:
     :param table: a bq table
     :return: colon concatenated project, dataset
     """
-    return ":".join([table.project, table.project])
+    return ":".join([table.project, table.dataset_name])
 
 
 def _buildDataSetTableKey_(table: Table) -> str:

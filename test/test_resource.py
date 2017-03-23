@@ -5,6 +5,7 @@ from google.cloud.bigquery.client import Client
 from google.cloud.bigquery.dataset import Dataset
 from google.cloud.bigquery.table import Table
 
+import resource
 from resource import strictSubstring, Resource, \
     BqDatasetBackedResource, BqViewBackedTableResource, \
     BqQueryBasedResource
@@ -70,3 +71,21 @@ class Test(unittest.TestCase):
 
         self.assertTrue(view.dependsOn(dataset))
         self.assertFalse(dataset.dependsOn(view))
+
+    @mock.patch('google.cloud.bigquery.table.Table')
+    def test_buildDataSetKey_(self, table):
+        table.project = 'p'
+        table.dataset_name = 'd'
+        actual = resource._buildDataSetKey_(table)
+        expected = 'p:d'
+        self.assertEqual(actual, expected)
+
+    @mock.patch('google.cloud.bigquery.table.Table')
+    def test_buildTableKey_(self, table: Table):
+        table.project = 'p'
+        table.dataset_name = 'd'
+        table.name = 't'
+        actual = resource._buildDataSetTableKey_(table)
+        expected = 'p:d:t'
+        self.assertEqual(actual, expected)
+
