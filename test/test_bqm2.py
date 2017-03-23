@@ -1,12 +1,13 @@
 import unittest
 
+from datetime import datetime
 from google.cloud.bigquery.schema import SchemaField
 import mock
 from mock.mock import MagicMock
 
 from bqm2 import DelegatingFileSuffixLoader, FileLoader, \
     parseDatasetTable, \
-    parseDataset, BqDataFileLoader
+    parseDataset, BqDataFileLoader, BqQueryTemplatingFileLoader
 
 
 class Test(unittest.TestCase):
@@ -77,6 +78,28 @@ class Test(unittest.TestCase):
         result = BqDataFileLoader("dummy").loadSchemaFromString("a:int,"
                                                            "b:string")
         self.assertEquals(expected, result)
+
+    def testExplodeTemplateVarsArray(self):
+        from datetime import datetime, timedelta
+
+        n = datetime.today()
+        expectedDt = [dt.strftime("%Y%m%d") for dt in [n, n + timedelta(
+                days=-1)]]
+        template = {"folder": "afolder",
+                    "foo": "bar_{folder}_{filename}",
+                    "yyyymmdd": [-1, 0]}
+        result = BqQueryTemplatingFileLoader\
+                .explodeTemplateVarsArray([template],
+                'afolder', 'afile', 'adataset')
+        expected = [{'filename': 'afile', 'folder': 'afolder', 'dataset':
+                    'adataset', 'yyyymmdd': expectedDt[1], 'foo':
+                    'bar_afolder_afile', "table": "afile"},
+                    {'filename': 'afile', 'folder': 'afolder', 'dataset':
+                    'adataset', 'yyyymmdd': expectedDt[0], 'foo':
+                        'bar_afolder_afile', "table": "afile"}]
+        self.assertEqual(result, expected)
+
+
 
 if __name__ == '__main__':
     unittest.main()

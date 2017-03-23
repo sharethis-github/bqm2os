@@ -322,6 +322,7 @@ class BqQueryBackedTableResource(BqQueryBasedResource):
                           self.table.name, str(uuid.uuid4())])
         query_job = self.bqClient.run_async_query(jobid, self.query)
         query_job.allow_large_results = True
+        query_job.flatten_results = False
         query_job.destination = self.table
         query_job.priority = QueryPriority.BATCH
         query_job.write_disposition = WriteDisposition.WRITE_TRUNCATE

@@ -12,12 +12,15 @@ from google.cloud.bigquery.client import Client
 from google.cloud.bigquery.schema import SchemaField
 from google.cloud.bigquery.table import Table
 
+import tmplhelper
 from resource import BqQueryBackedTableResource, \
     BqViewBackedTableResource, BqJobs, BqDatasetBackedResource, \
     BqDataLoadTableResource, _buildDataSetKey_, \
     Resource
 from os.path import getmtime
 from google.cloud import bigquery
+
+from tmplhelper import explodeTemplate, evalTmplRecurse
 
 
 class FileLoader:
@@ -137,6 +140,7 @@ class BqQueryTemplatingFileLoader(FileLoader):
     todo: add support for project although this is pretty limiting in
     reality
     """
+
     def __init__(self, bqClient: Client, bqJobs: BqJobs,
                  defaultDataset=None):
         """
@@ -150,36 +154,62 @@ class BqQueryTemplatingFileLoader(FileLoader):
         self.bqJobs = bqJobs
         self.datasets = {}
 
+    def explodeTemplateVarsArray(rawTemplates: list,
+                                 folder: str,
+                                 filename: str,
+                                 defaultDataset: str):
+        ret = []
+        for t in rawTemplates:
+            copy = t.copy()
+            copy['folder'] = folder
+            copy['filename'] = filename
+            if 'dataset' not in copy:
+                copy['dataset'] = defaultDataset
+            if 'table' not in copy:
+                copy['table'] = filename
+
+            ret += [evalTmplRecurse(t) for t in explodeTemplate(copy)]
+
+        return ret
+
     def load(self, filePath):
         mtime = getmtime(filePath)
         ret = []
         with open(filePath) as f:
             template = f.read()
             try:
-                templateVars = self.loadTemplateVars(filePath + ".vars")
+                filename = filePath.split("/")[-1].split(".")[-2]
+                folder = filePath.split("/")[-2]
+                templateVars = \
+                    BqQueryTemplatingFileLoader.explodeTemplateVarsArray(
+                        self.loadTemplateVars(
+                            filePath + ".vars"), folder, filename,
+                        self.defaultDataset)
+
             except FileNotFoundError:
                 raise Exception("Please define template vars in a file "
                                 "called " + filePath + ".vars")
 
             for v in templateVars:
                 # print ("formatting: ", v)
-                dataset = self.defaultDataset
-                if 'dataset' in v:
-                    dataset = v['dataset'].format(**v)
-                else:
-                    v['dataset'] = self.defaultDataset
+                dataset = v['dataset']
 
-                filename = filePath.split("/")[-1].split(".")[-2]
                 try:
-                    query = template.format(filename=filename, **v)
+                    needed = tmplhelper.keysOfTemplate(template)
+                    if not needed.issubset(v.keys()):
+                        missing = str(needed - v.keys())
+                        raise Exception("Please define values for " +
+                                        missing + " in a file: ",
+                                        filePath + ".vars")
+                    query = template.format(**v)
                     # print("formatting query: ", query)
-                    table = v['table'].format(filename=filePath.split("/")[
-                                                     -1].split(".")[-2], **v)
+                    table = v['table']
 
                     bqTable = self.bqClient.dataset(dataset).table(table)
                     jT = self.bqJobs.getJobForTable(bqTable)
                     ret.append(BqQueryBackedTableResource(query, bqTable,
-                                                          int(mtime * 1000),
+                                                          int(
+                                                              mtime * 1000),
                                                           self.bqClient,
                                                           queryJob=jT))
 
@@ -192,15 +222,20 @@ class BqQueryTemplatingFileLoader(FileLoader):
         return ret
 
     def loadTemplateVars(self, filePath) -> list:
-        with open(filePath) as f:
-            templateVarsList = json.loads(f.read())
-            if not isinstance(templateVarsList, list):
-                raise Exception("Must be json list of objects in " + filePath)
-            for definition in templateVarsList:
-                if not isinstance(definition, dict):
+        try:
+            with open(filePath) as f:
+                templateVarsList = json.loads(f.read())
+                if not isinstance(templateVarsList, list):
                     raise Exception(
                         "Must be json list of objects in " + filePath)
-            return templateVarsList
+                for definition in templateVarsList:
+                    if not isinstance(definition, dict):
+                        raise Exception(
+                            "Must be json list of objects in " + filePath)
+                return templateVarsList
+        except FileNotFoundError:
+            print("template file: ", filePath, " not found")
+            return [{}]
 
 
 class BqQueryFileLoader(FileLoader):
@@ -258,7 +293,7 @@ class BqDataFileLoader(FileLoader):
 
     def load(self, filePath):
         mtime = getmtime(filePath)
-        schemaFilePath = filePath+".schema"
+        schemaFilePath = filePath + ".schema"
         mtime_schema = getmtime(schemaFilePath)
         mtime = max([mtime, mtime_schema])
         bqTable = parseDatasetTable(filePath, self.defaultDataset,
@@ -296,6 +331,7 @@ class DependencyBuilder:
     """
     Dependency builder loads resources from the folders specified.
     """
+
     def __init__(self, loader):
         self.loader = loader
 
@@ -414,7 +450,7 @@ class DependencyExecutor:
                     running = True
                 else:
                     print(resources[n], " resource exists and is up to "
-                          "date")
+                                        "date")
                     del dependencies[n]
 
             for n in sorted(dependencies.keys()):
@@ -433,6 +469,7 @@ class DependencyExecutor:
             if len(dependencies):
                 if running:
                     sleep(checkFrequency)
+
 
 if __name__ == "__main__":
     parser = optparse.OptionParser("[options] folder[ folder2[...]]")

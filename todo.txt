@@ -1,3 +1,7 @@
+# git revert may not play well with replaying table loads
+
+# allow for specifying arbirary template k/v from command line or a file
+
 # cancel running jobs whose local definitions or upstream dependencies have changed
 
 # need to parse unmanaged dependencies as well as managed tependencies
