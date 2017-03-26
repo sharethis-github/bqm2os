@@ -1,3 +1,5 @@
+# allow templatization of views
+
 # git revert may not play well with replaying table loads
 
 # allow for specifying arbirary template k/v from command line or a file

@@ -504,7 +504,8 @@ if __name__ == "__main__":
 
     client = Client()
     bqJobs = BqJobs(client)
-    bqJobs.loadTableJobs()
+    if options.execute:
+        bqJobs.loadTableJobs()
 
     builder = DependencyBuilder(
         DelegatingFileSuffixLoader(

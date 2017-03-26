@@ -247,7 +247,17 @@ class BqQueryBasedResource(Resource):
         """ time in milliseconds.  None if not created """
         self.table.reload()
         createdTime = self.table.modified
+
         if createdTime:
+            # hijack this step to update description
+            if not self.table.description:
+                self.table.description = "\n".join(["This table/view was " +
+                                                    "created with the " +
+                                                    "following query", "",
+                                                    self.query, "",
+                                                    "Edits will not be "
+                                                    "saved"])
+                self.table.update()
             return int(createdTime.strftime("%s")) * 1000
         return None
 
