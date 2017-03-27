@@ -85,25 +85,48 @@ def explodeTemplate(templateVars: dict):
         if 'yyyymmdd' in k:
             templateVars[k] = handleDayDateField(datetime.today(), v)
 
-    striped = {}
-    output_length = 1
+    topremute = []
     for (k, v) in templateVars.items():
+        items = []
         if isinstance(v, list):
-            output_length *= len(v)
-
-    for (k, v) in templateVars.items():
-        if isinstance(v, list):
-            mult = int(output_length / len(v))
-            striped[k] = v * mult
+            for vv in v:
+                items.append((k, vv))
         else:
-            striped[k] = [v] * output_length
+            items.append((k, v))
+        topremute.append(items)
 
-    ret = []
-    for i in range(output_length):
-        element = {}
-        for (k, v) in striped.items():
-            element[k] = striped[k][i]
+    collect = []
+    out = []
+    makeCombinations(topremute, out, collect)
+    # now make maps
+    maps = []
+    for s in collect:
+        maps.append(dict(s))
+    return maps
 
-        ret.append(element)
 
-    return ret
+def makeCombinations(lists: list, out: list, collect: list):
+    """
+        given a list of lists, generate a list of lists which
+        has all combinations of each element as a a member
+
+        Example:
+            [[a,b], [c,d]] becomes
+
+            [
+             [a,c],
+             [a,d],
+             [b,c],
+             [b,d]
+            ]
+    """
+    if not len(lists):
+        collect.append(out)
+        return
+
+    listsCopy = lists.copy()
+    first = listsCopy.pop(0)
+    for m in first:
+        outCopy = out.copy()
+        outCopy.append(m)
+        makeCombinations(listsCopy, outCopy, collect)

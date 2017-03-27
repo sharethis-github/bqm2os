@@ -2,12 +2,12 @@ import unittest
 
 from datetime import datetime, timedelta
 
+from frozendict import frozendict
+
 from tmplhelper import explodeTemplate, handleDayDateField, evalTmplRecurse
 
 
 class Test(unittest.TestCase):
-
-
     def testEvalTmplRecurseCircular(self):
         input = {"a": '{b}', 'b': "{a}"}
         try:
@@ -40,10 +40,10 @@ class Test(unittest.TestCase):
         expectedDt = n + timedelta(days=-1)
         dt = expectedDt.strftime("%Y%m%d")
 
-        templateVars =  { "filename": "fname",
-                          "table": "{filename}_{keywords_table}",
-                         "keywords_table": "url_kw_{yyyymmdd}",
-                          "overlap_threshold": "0.2", "yyyymmdd": -1 }
+        templateVars = {"filename": "fname",
+                        "table": "{filename}_{keywords_table}",
+                        "keywords_table": "url_kw_{yyyymmdd}",
+                        "overlap_threshold": "0.2", "yyyymmdd": -1}
 
         expected = {'keywords_table': 'url_kw_' + dt, 'filename': 'fname',
                     'yyyymmdd': dt, 'table': 'fname_url_kw_' + dt,
@@ -51,10 +51,55 @@ class Test(unittest.TestCase):
         result = evalTmplRecurse(explodeTemplate(templateVars)[0])
         self.assertEqual(expected, result)
 
+    def testBuildTemplateFromBadBug(self):
+        n = datetime.today()
+        expectedDt = n + timedelta(days=-1)
+
+        templateVars = {
+            "filename": "myfile",
+            "table": "{filename}_{keywords_table}_{kw}_{yyyymmdd}_{modulo_val}",
+            "keywords_table": "{kw_features_table}",
+            "kw_features_table": ["kw_features_ranked",
+                                  "kw_expansion_ranked"],
+            "yyyymmdd": -1,
+            "kw": ["url_kw", "url_title_tokens_kw", "url_url_tokens_kw"],
+            "modulo_val": ["0", "1", "2", "3"],
+            "modulo": "4"
+        }
+
+        result = explodeTemplate(templateVars)
+        result = [evalTmplRecurse(x) for x in result]
+        tables = set([x['table'] for x in result])
+        expectedSet = set(['myfile_kw_features_ranked_url_kw_20170326_2',
+                       'myfile_kw_expansion_ranked_url_title_tokens_kw_20170326_1',
+                       'myfile_kw_expansion_ranked_url_url_tokens_kw_20170326_2',
+                       'myfile_kw_expansion_ranked_url_title_tokens_kw_20170326_3',
+                       'myfile_kw_features_ranked_url_kw_20170326_0',
+                       'myfile_kw_features_ranked_url_title_tokens_kw_20170326_3',
+                       'myfile_kw_expansion_ranked_url_kw_20170326_1',
+                       'myfile_kw_features_ranked_url_url_tokens_kw_20170326_2',
+                       'myfile_kw_features_ranked_url_title_tokens_kw_20170326_1',
+                       'myfile_kw_features_ranked_url_url_tokens_kw_20170326_0',
+                       'myfile_kw_expansion_ranked_url_url_tokens_kw_20170326_1',
+                       'myfile_kw_features_ranked_url_kw_20170326_1',
+                       'myfile_kw_features_ranked_url_title_tokens_kw_20170326_0',
+                       'myfile_kw_features_ranked_url_url_tokens_kw_20170326_3',
+                       'myfile_kw_expansion_ranked_url_title_tokens_kw_20170326_0',
+                       'myfile_kw_expansion_ranked_url_url_tokens_kw_20170326_3',
+                       'myfile_kw_expansion_ranked_url_kw_20170326_0',
+                       'myfile_kw_features_ranked_url_kw_20170326_3',
+                       'myfile_kw_expansion_ranked_url_url_tokens_kw_20170326_0',
+                       'myfile_kw_expansion_ranked_url_title_tokens_kw_20170326_2',
+                       'myfile_kw_features_ranked_url_url_tokens_kw_20170326_1',
+                       'myfile_kw_features_ranked_url_title_tokens_kw_20170326_2',
+                       'myfile_kw_expansion_ranked_url_kw_20170326_2',
+                       'myfile_kw_expansion_ranked_url_kw_20170326_3'])
+
+        self.assertEqual(tables, expectedSet)
 
     def testHandleDayDateFieldIntFormat(self):
         d = datetime.strptime('20051231', '%Y%m%d')
-        result=handleDayDateField(d, -1)
+        result = handleDayDateField(d, -1)
         expected = ['20051230']
         self.assertEqual(result, expected)
 
@@ -67,22 +112,22 @@ class Test(unittest.TestCase):
     def testHandleDayDateFieldIntStringArrayFormat(self):
         d = datetime.strptime('20051231', '%Y%m%d')
         result = handleDayDateField(d, ["-1",
-                                                                    -3])
+                                        -3])
         expected = sorted(['20051230', '20051229', '20051228'])
         self.assertEqual(result, expected)
 
     def testExplodeTemplateSingleVar(self):
-        templateVars =  { "table": "{filename}_{keywords_table}",
-                         "keywords_table": "url_kw",
-                          "overlap_threshold": "0.2"}
+        templateVars = {"table": "{filename}_{keywords_table}",
+                        "keywords_table": "url_kw",
+                        "overlap_threshold": "0.2"}
 
         result = explodeTemplate(templateVars)
         self.assertEqual([templateVars], result)
 
     def testExplodeTemplateOneArray(self):
-        templateVars =  { "table": "{filename}_{keywords_table}",
-                         "keywords_table": ["url_kw", "url_kw_title"],
-                          "overlap_threshold": "0.2"}
+        templateVars = {"table": "{filename}_{keywords_table}",
+                        "keywords_table": ["url_kw", "url_kw_title"],
+                        "overlap_threshold": "0.2"}
 
         expected = [
             {"table": "{filename}_{keywords_table}",
@@ -95,29 +140,30 @@ class Test(unittest.TestCase):
         result = explodeTemplate(templateVars)
         self.assertEqual(expected, result)
 
-
     def testExplodeTemplateTwoArray(self):
         templateVars = {"table": "{filename}_{keywords_table}",
                         "keywords_table": ["url_kw", "url_kw_title"],
-                        "overlap_threshold": ["0.2","0.1"]}
+                        "overlap_threshold": ["0.2", "0.1"]}
 
         expected = [
             {"table": "{filename}_{keywords_table}",
              "keywords_table": "url_kw",
              "overlap_threshold": "0.2"},
             {"table": "{filename}_{keywords_table}",
-             "keywords_table": "url_kw_title",
+             "keywords_table": "url_kw",
              "overlap_threshold": "0.1"},
             {"table": "{filename}_{keywords_table}",
-             "keywords_table": "url_kw",
+             "keywords_table": "url_kw_title",
              "overlap_threshold": "0.2"},
             {"table": "{filename}_{keywords_table}",
              "keywords_table": "url_kw_title",
              "overlap_threshold": "0.1"}
         ]
+        expected = set([frozendict(x) for x in expected])
 
         result = explodeTemplate(
             templateVars)
+        result = set(frozendict(x) for x in result)
         self.assertEqual(expected, result)
 
 
