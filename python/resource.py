@@ -36,7 +36,7 @@ class Resource:
 class BqJobs:
     def __init__(self, bqClient: Client,
                  tableToJobMap: dict={},
-                 pageSize: int=1000, page_limit: int=5):
+                 pageSize: int=1000, page_limit: int=1):
         self.bqClient = bqClient
         self.tableToJobMap = tableToJobMap
         self.page_limit = page_limit
@@ -334,7 +334,7 @@ class BqQueryBackedTableResource(BqQueryBasedResource):
         query_job.allow_large_results = True
         query_job.flatten_results = False
         query_job.destination = self.table
-        query_job.priority = QueryPriority.BATCH
+        query_job.priority = QueryPriority.INTERACTIVE
         query_job.write_disposition = WriteDisposition.WRITE_TRUNCATE
         query_job.begin()
         self.queryJob = query_job

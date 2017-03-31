@@ -54,7 +54,6 @@ class Test(unittest.TestCase):
     def testBuildTemplateFromBadBug(self):
         n = datetime.today()
         expectedDt = n + timedelta(days=-1)
-
         templateVars = {
             "filename": "myfile",
             "table": "{filename}_{keywords_table}_{kw}_{yyyymmdd}_{modulo_val}",
@@ -70,31 +69,32 @@ class Test(unittest.TestCase):
         result = explodeTemplate(templateVars)
         result = [evalTmplRecurse(x) for x in result]
         tables = set([x['table'] for x in result])
-        expectedSet = set(['myfile_kw_features_ranked_url_kw_20170326_2',
-                       'myfile_kw_expansion_ranked_url_title_tokens_kw_20170326_1',
-                       'myfile_kw_expansion_ranked_url_url_tokens_kw_20170326_2',
-                       'myfile_kw_expansion_ranked_url_title_tokens_kw_20170326_3',
-                       'myfile_kw_features_ranked_url_kw_20170326_0',
-                       'myfile_kw_features_ranked_url_title_tokens_kw_20170326_3',
-                       'myfile_kw_expansion_ranked_url_kw_20170326_1',
-                       'myfile_kw_features_ranked_url_url_tokens_kw_20170326_2',
-                       'myfile_kw_features_ranked_url_title_tokens_kw_20170326_1',
-                       'myfile_kw_features_ranked_url_url_tokens_kw_20170326_0',
-                       'myfile_kw_expansion_ranked_url_url_tokens_kw_20170326_1',
-                       'myfile_kw_features_ranked_url_kw_20170326_1',
-                       'myfile_kw_features_ranked_url_title_tokens_kw_20170326_0',
-                       'myfile_kw_features_ranked_url_url_tokens_kw_20170326_3',
-                       'myfile_kw_expansion_ranked_url_title_tokens_kw_20170326_0',
-                       'myfile_kw_expansion_ranked_url_url_tokens_kw_20170326_3',
-                       'myfile_kw_expansion_ranked_url_kw_20170326_0',
-                       'myfile_kw_features_ranked_url_kw_20170326_3',
-                       'myfile_kw_expansion_ranked_url_url_tokens_kw_20170326_0',
-                       'myfile_kw_expansion_ranked_url_title_tokens_kw_20170326_2',
-                       'myfile_kw_features_ranked_url_url_tokens_kw_20170326_1',
-                       'myfile_kw_features_ranked_url_title_tokens_kw_20170326_2',
-                       'myfile_kw_expansion_ranked_url_kw_20170326_2',
-                       'myfile_kw_expansion_ranked_url_kw_20170326_3'])
-
+        expectedSet = ['myfile_kw_features_ranked_url_kw_{dt}_2',
+                       'myfile_kw_expansion_ranked_url_title_tokens_kw_{dt}_1',
+                       'myfile_kw_expansion_ranked_url_url_tokens_kw_{dt}_2',
+                       'myfile_kw_expansion_ranked_url_title_tokens_kw_{dt}_3',
+                       'myfile_kw_features_ranked_url_kw_{dt}_0',
+                       'myfile_kw_features_ranked_url_title_tokens_kw_{dt}_3',
+                       'myfile_kw_expansion_ranked_url_kw_{dt}_1',
+                       'myfile_kw_features_ranked_url_url_tokens_kw_{dt}_2',
+                       'myfile_kw_features_ranked_url_title_tokens_kw_{dt}_1',
+                       'myfile_kw_features_ranked_url_url_tokens_kw_{dt}_0',
+                       'myfile_kw_expansion_ranked_url_url_tokens_kw_{dt}_1',
+                       'myfile_kw_features_ranked_url_kw_{dt}_1',
+                       'myfile_kw_features_ranked_url_title_tokens_kw_{dt}_0',
+                       'myfile_kw_features_ranked_url_url_tokens_kw_{dt}_3',
+                       'myfile_kw_expansion_ranked_url_title_tokens_kw_{dt}_0',
+                       'myfile_kw_expansion_ranked_url_url_tokens_kw_{dt}_3',
+                       'myfile_kw_expansion_ranked_url_kw_{dt}_0',
+                       'myfile_kw_features_ranked_url_kw_{dt}_3',
+                       'myfile_kw_expansion_ranked_url_url_tokens_kw_{dt}_0',
+                       'myfile_kw_expansion_ranked_url_title_tokens_kw_{dt}_2',
+                       'myfile_kw_features_ranked_url_url_tokens_kw_{dt}_1',
+                       'myfile_kw_features_ranked_url_title_tokens_kw_{dt}_2',
+                       'myfile_kw_expansion_ranked_url_kw_{dt}_2',
+                       'myfile_kw_expansion_ranked_url_kw_{dt}_3']
+        expectedSet = set([x.format(dt=expectedDt.strftime("%Y%m%d")) for
+                           x in expectedSet])
         self.assertEqual(tables, expectedSet)
 
     def testHandleDayDateFieldIntFormat(self):
