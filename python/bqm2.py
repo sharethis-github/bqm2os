@@ -11,7 +11,8 @@ from time import sleep
 from google.cloud.bigquery.client import Client
 
 from loader import DelegatingFileSuffixLoader, BqQueryFileLoader, \
-    BqQueryTemplatingFileLoader, BqViewFileLoader, BqDataFileLoader
+    BqQueryTemplatingFileLoader, BqViewFileLoader, BqDataFileLoader, \
+    TableType
 from resource import BqJobs
 from google.cloud import bigquery
 
@@ -201,8 +202,12 @@ if __name__ == "__main__":
             query=BqQueryFileLoader(bigquery.Client(), bqJobs, **kwargs),
             querytemplate=BqQueryTemplatingFileLoader(bigquery.Client(),
                                                       bqJobs,
+                                                      TableType.TABLE,
                                                       **kwargs),
-            view=BqViewFileLoader(bigquery.Client(), **kwargs),
+            view=BqQueryTemplatingFileLoader(bigquery.Client(),
+                                             bqJobs,
+                                             TableType.VIEW,
+                                             **kwargs),
             localdata=BqDataFileLoader(bigquery.Client(), **kwargs)))
 
     (resources, dependencies) = builder.buildDepend(args)

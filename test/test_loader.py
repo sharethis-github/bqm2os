@@ -1,13 +1,56 @@
 import unittest
 
+from google.cloud.bigquery.client import Client
 from google.cloud.bigquery.schema import SchemaField
 import mock
-from google.cloud.bigquery.table import Table
 from mock.mock import MagicMock
 
 from loader import DelegatingFileSuffixLoader, FileLoader, \
     parseDatasetTable, \
-    parseDataset, BqDataFileLoader, BqQueryTemplatingFileLoader
+    parseDataset, BqDataFileLoader, BqQueryTemplatingFileLoader, TableType
+from resource import BqJobs, BqViewBackedTableResource, \
+    BqQueryBackedTableResource
+
+
+class Test(unittest.TestCase):
+
+    @mock.patch('google.cloud.bigquery.Client')
+    @mock.patch('resource.BqJobs')
+    def test_ToggleToTableForTemplatingLoader(self, bqClient: Client,
+                                           bqJobs: BqJobs):
+        self.toggleToTableOrViewForTemplatingLoader(bqClient, bqJobs,
+                                                    TableType.TABLE,
+                                                    BqQueryBackedTableResource)
+
+    @mock.patch('google.cloud.bigquery.Client')
+    @mock.patch('resource.BqJobs')
+    def test_ToggleToViewForTemplatingLoader(self, bqClient: Client,
+                                                  bqJobs: BqJobs):
+        self.toggleToTableOrViewForTemplatingLoader(bqClient, bqJobs,
+                                                    TableType.VIEW,
+                                                    BqViewBackedTableResource)
+
+    def toggleToTableOrViewForTemplatingLoader(self, bqClient: Client,
+                                                    bqJobs: BqJobs,
+                                                    tableType: TableType,
+                                                    theType):
+
+        bqClient.dataset('adataset').table('atable').name = 'atable'
+        bqClient.dataset('adataset').table('atable').dataset_name = \
+            'adataset'
+        bqClient.dataset('adataset').table('atable').project = 'aproject'
+
+        ldr = BqQueryTemplatingFileLoader(bqClient, bqJobs,
+                                          tableType,
+                                          defaultDataset="dataset")
+        self.assertEqual(ldr.tableType, tableType)
+        out = {}
+        ldr.processTemplateVar({ "dataset": "dataset", "table": "foo"},
+                               "select * from fiddle.sticks",
+                               "afilepath", 0, out)
+        key = "aproject:adataset:atable"
+        self.assertTrue(key in out)
+        self.assertTrue(isinstance(out[key], theType))
 
 
 class Test(unittest.TestCase):
@@ -108,7 +151,8 @@ class Test(unittest.TestCase):
             'adataset'
         bqClient.dataset('adataset').table('atable').project = 'aproject'
 
-        loader = BqQueryTemplatingFileLoader(bqClient, bqJobs, 'default')
+        loader = BqQueryTemplatingFileLoader(bqClient, bqJobs,
+                                             TableType.TABLE, 'default')
         templateVar = {
             'table': 'atable',
             'dataset': 'adataset',
@@ -129,7 +173,8 @@ class Test(unittest.TestCase):
         # templateVars: dict, template: str,
         # filePath: str, mtime: int, out: dict
 
-        loader = BqQueryTemplatingFileLoader(bqClient, bqJobs, 'default')
+        loader = BqQueryTemplatingFileLoader(bqClient, bqJobs,
+                                             TableType.TABLE,'default')
         templateVar = {
             'table': 'atable',
         }
@@ -148,7 +193,8 @@ class Test(unittest.TestCase):
         # templateVars: dict, template: str,
         # filePath: str, mtime: int, out: dict
 
-        loader = BqQueryTemplatingFileLoader(bqClient, bqJobs, 'default')
+        loader = BqQueryTemplatingFileLoader(bqClient, bqJobs,
+                                             TableType.TABLE, 'default')
         templateVar = {
             'dataset': 'adataset',
         }

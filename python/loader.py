@@ -5,6 +5,7 @@ from google.cloud.bigquery.client import Client
 from google.cloud.bigquery.schema import SchemaField
 from google.cloud.bigquery.table import Table
 from os.path import getmtime
+from enum import Enum
 
 import tmplhelper
 from resource import Resource, _buildDataSetKey_, BqDatasetBackedResource, \
@@ -108,6 +109,11 @@ def cacheDataSet(bqClient: Client, bqTable: Table, datasets: dict):
     return datasets[dsetKey]
 
 
+class TableType(Enum):
+    VIEW = 1
+    TABLE = 2
+
+
 class BqQueryTemplatingFileLoader(FileLoader):
     """
     Query Template loader
@@ -131,18 +137,22 @@ class BqQueryTemplatingFileLoader(FileLoader):
     reality
     """
 
-    def __init__(self, bqClient: Client, bqJobs: BqJobs,
-                 defaultDataset=None):
+    def __init__(self, bqClient: Client, bqJobs: BqJobs, tableType:
+                 TableType, defaultDataset=None):
         """
 
         :param bqClient: The big query client to use
         :param bqJobs: An initialized BqJobs
+        :param tableType Either TABLE or VIEW
         :param defaultDataset: A default dataset to use in templates
         """
         self.bqClient = bqClient
         self.defaultDataset = defaultDataset
         self.bqJobs = bqJobs
         self.datasets = {}
+        self.tableType = tableType
+        if not self.tableType or self.tableType not in TableType:
+            raise Exception("TableType must be set")
 
     def explodeTemplateVarsArray(rawTemplates: list,
                                  folder: str,
@@ -193,18 +203,24 @@ class BqQueryTemplatingFileLoader(FileLoader):
         table = templateVars['table']
 
         bqTable = self.bqClient.dataset(dataset).table(table)
-        jT = self.bqJobs.getJobForTable(bqTable)
-        arsrc = BqQueryBackedTableResource(query, bqTable,
-                                           int(mtime * 1000),
-                                           self.bqClient,
-                                           queryJob=jT)
-
         key = _buildDataSetTableKey_(bqTable)
         if key in out:
             raise Exception("Templating generated duplicate "
                             "tables outputs for " + filePath)
 
-        out[key] = arsrc
+        if self.tableType == TableType.TABLE:
+            jT = self.bqJobs.getJobForTable(bqTable)
+            arsrc = BqQueryBackedTableResource(query, bqTable,
+                                               int(mtime * 1000),
+                                               self.bqClient,
+                                               queryJob=jT)
+            out[key] = arsrc
+        elif self.tableType == TableType.VIEW:
+            arsrc = BqViewBackedTableResource(query, bqTable,
+                                              int(mtime * 1000),
+                                              self.bqClient)
+            out[key] = arsrc
+
         dsetKey = _buildDataSetKey_(bqTable)
         if dsetKey not in out:
             out[dsetKey] = cacheDataSet(self.bqClient, bqTable,
