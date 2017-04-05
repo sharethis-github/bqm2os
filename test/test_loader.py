@@ -42,7 +42,7 @@ class Test(unittest.TestCase):
 
         ldr = BqQueryTemplatingFileLoader(bqClient, bqJobs,
                                           tableType,
-                                          defaultDataset="dataset")
+                                          {"dataset": "dataset"})
         self.assertEqual(ldr.tableType, tableType)
         out = {}
         ldr.processTemplateVar({ "dataset": "dataset", "table": "foo"},
@@ -133,7 +133,7 @@ class Test(unittest.TestCase):
                     "yyyymmdd": [-1, 0]}
         result = BqQueryTemplatingFileLoader\
                 .explodeTemplateVarsArray([template],
-                'afolder', 'afile', 'adataset')
+                'afolder', 'afile', {'dataset': 'adataset'})
         expected = [{'filename': 'afile', 'folder': 'afolder', 'dataset':
                     'adataset', 'yyyymmdd': expectedDt[1], 'foo':
                     'bar_afolder_afile', "table": "afile"},
@@ -152,7 +152,8 @@ class Test(unittest.TestCase):
         bqClient.dataset('adataset').table('atable').project = 'aproject'
 
         loader = BqQueryTemplatingFileLoader(bqClient, bqJobs,
-                                             TableType.TABLE, 'default')
+                                             TableType.TABLE,
+                                             {'dataset': 'default'})
         templateVar = {
             'table': 'atable',
             'dataset': 'adataset',
@@ -174,7 +175,7 @@ class Test(unittest.TestCase):
         # filePath: str, mtime: int, out: dict
 
         loader = BqQueryTemplatingFileLoader(bqClient, bqJobs,
-                                             TableType.TABLE,'default')
+                                             TableType.TABLE,{})
         templateVar = {
             'table': 'atable',
         }

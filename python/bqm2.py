@@ -10,8 +10,8 @@ from time import sleep
 
 from google.cloud.bigquery.client import Client
 
-from loader import DelegatingFileSuffixLoader, BqQueryFileLoader, \
-    BqQueryTemplatingFileLoader, BqViewFileLoader, BqDataFileLoader, \
+from loader import DelegatingFileSuffixLoader, \
+    BqQueryTemplatingFileLoader, BqDataFileLoader, \
     TableType
 from resource import BqJobs
 from google.cloud import bigquery
@@ -68,24 +68,24 @@ class DependencyExecutor:
 
             print(k, "depends on", msg)
 
-        while len(dependencies):
+        while len(self.dependencies):
             todel = set([])
-            for n in sorted(dependencies.keys()):
-                if not len(dependencies[n]):
+            for n in sorted(self.dependencies.keys()):
+                if not len(self.dependencies[n]):
                     todel.add(n)
-                    with open(folder + "/" + resources[n].key() +
+                    with open(folder + "/" + self.resources[n].key() +
                               ".debug", "w") as f:
-                        f.write(resources[n].dump())
+                        f.write(self.resources[n].dump())
                         f.close()
-                    del dependencies[n]
+                    del self.dependencies[n]
 
-            for n in sorted(dependencies.keys()):
+            for n in sorted(self.dependencies.keys()):
                 torm = set([])
-                for k in dependencies[n]:
-                    if k not in dependencies:
+                for k in self.dependencies[n]:
+                    if k not in self.dependencies:
                         torm.add(k)
 
-                dependencies[n] = dependencies[n] - torm
+                    self.dependencies[n] = self.dependencies[n] - torm
 
     def show(self):
         for (k, s) in sorted(self.dependencies.items()):
@@ -96,67 +96,67 @@ class DependencyExecutor:
 
             print(k, "depends on", msg)
 
-        while len(dependencies):
+        while len(self.dependencies):
             todel = set([])
-            for n in sorted(dependencies.keys()):
-                if not len(dependencies[n]):
+            for n in sorted(self.dependencies.keys()):
+                if not len(self.dependencies[n]):
                     todel.add(n)
                     print("would execute", n)
-                    del dependencies[n]
+                    del self.dependencies[n]
 
-            for n in sorted(dependencies.keys()):
+            for n in sorted(self.dependencies.keys()):
                 torm = set([])
-                for k in dependencies[n]:
-                    if k not in dependencies:
+                for k in self.dependencies[n]:
+                    if k not in self.dependencies:
                         torm.add(k)
 
-                dependencies[n] = dependencies[n] - torm
+                    self.dependencies[n] = self.dependencies[n] - torm
 
     def execute(self, checkFrequency=10):
-        while len(dependencies):
+        while len(self.dependencies):
             todel = set([])
-            for n in sorted(dependencies.keys()):
-                if not len(dependencies[n]):
+            for n in sorted(self.dependencies.keys()):
+                if not len(self.dependencies[n]):
                     todel.add(n)
 
             """ flag to capture if anything was running.  If so,
             we will pause before looping again """
             running = False
             for n in sorted(todel):
-                if (resources[n].isRunning()):
-                    print(resources[n], "already running")
+                if (self.resources[n].isRunning()):
+                    print(self.resources[n], "already running")
                     running = True
                     continue
-                if not resources[n].exists():
+                if not self.resources[n].exists():
                     print("executing: because it doesn't exist ", n)
-                    resources[n].create()
+                    self.resources[n].create()
                     running = True
-                elif resources[n].definitionTime() \
-                        > resources[n].updateTime():
+                elif self.resources[n].definitionTime() \
+                        > self.resources[n].updateTime():
                     print("executing: because its definition is newer "
                           "than last created ",
-                          n, resources[n])
-                    resources[n].create()
+                          n, self.resources[n])
+                    self.resources[n].create()
                     running = True
                 else:
-                    print(resources[n], " resource exists and is up to "
-                                        "date")
-                    del dependencies[n]
+                    print(self.resources[n],
+                          " resource exists and is up to date")
+                    del self.dependencies[n]
 
-            for n in sorted(dependencies.keys()):
+            for n in sorted(self.dependencies.keys()):
                 torm = set([])
-                for k in dependencies[n]:
+                for k in self.dependencies[n]:
                     if k in torm:
                         continue
-                    if k not in dependencies:
-                        kDateTime = resources[k].updateTime()
-                        if kDateTime > resources[n].definitionTime():
-                            resources[n].defTime = kDateTime
+                    if k not in self.dependencies:
+                        kDateTime = self.resources[k].updateTime()
+                        if kDateTime > self.resources[n].definitionTime():
+                            self.resources[n].defTime = kDateTime
                         torm.add(k)
 
-                dependencies[n] = dependencies[n] - torm
+                self.dependencies[n] = self.dependencies[n] - torm
 
-            if len(dependencies):
+            if len(self.dependencies):
                 if running:
                     sleep(checkFrequency)
 
@@ -185,12 +185,22 @@ if __name__ == "__main__":
                       help="The loop interval between dependency tree"
                            " evaluation runs")
 
+    parser.add_option("--varsFile", dest="varsFile", type=str,
+                      help="A json file whose data can be refered to in "
+                           "view and query templates.  Must be a simple "
+                           "dictionary whose values are str")
+
     (options, args) = parser.parse_args()
 
     FORMAT = '%(asctime)-15s %(clientip)s %(user)-8s %(message)s'
     logging.basicConfig(format=FORMAT)
 
-    kwargs = {"defaultDataset": options.defaultDataset}
+    kwargs = {"dataset": options.defaultDataset}
+    if options.varsFile:
+        with open(options.varsFile) as f:
+            varJson = json.load(f)
+            for (k, v) in varJson.items():
+                kwargs[k] = v
 
     client = Client()
     bqJobs = BqJobs(client)
@@ -199,16 +209,16 @@ if __name__ == "__main__":
 
     builder = DependencyBuilder(
         DelegatingFileSuffixLoader(
-            query=BqQueryFileLoader(bigquery.Client(), bqJobs, **kwargs),
             querytemplate=BqQueryTemplatingFileLoader(bigquery.Client(),
                                                       bqJobs,
                                                       TableType.TABLE,
-                                                      **kwargs),
+                                                      kwargs),
             view=BqQueryTemplatingFileLoader(bigquery.Client(),
                                              bqJobs,
                                              TableType.VIEW,
-                                             **kwargs),
-            localdata=BqDataFileLoader(bigquery.Client(), **kwargs)))
+                                             kwargs),
+            localdata=BqDataFileLoader(bigquery.Client(),
+                                       kwargs['dataset'])))
 
     (resources, dependencies) = builder.buildDepend(args)
     executor = DependencyExecutor(resources, dependencies)

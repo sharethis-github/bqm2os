@@ -138,7 +138,7 @@ class BqQueryTemplatingFileLoader(FileLoader):
     """
 
     def __init__(self, bqClient: Client, bqJobs: BqJobs, tableType:
-                 TableType, defaultDataset=None):
+                 TableType, defaultVars={}):
         """
 
         :param bqClient: The big query client to use
@@ -147,7 +147,7 @@ class BqQueryTemplatingFileLoader(FileLoader):
         :param defaultDataset: A default dataset to use in templates
         """
         self.bqClient = bqClient
-        self.defaultDataset = defaultDataset
+        self.defaultVars = defaultVars
         self.bqJobs = bqJobs
         self.datasets = {}
         self.tableType = tableType
@@ -157,16 +157,20 @@ class BqQueryTemplatingFileLoader(FileLoader):
     def explodeTemplateVarsArray(rawTemplates: list,
                                  folder: str,
                                  filename: str,
-                                 defaultDataset: str):
+                                 defaultVars: dict):
         ret = []
         for t in rawTemplates:
             copy = t.copy()
             copy['folder'] = folder
             copy['filename'] = filename
             if 'dataset' not in copy:
-                copy['dataset'] = defaultDataset
+                copy['dataset'] = defaultVars['dataset']
             if 'table' not in copy:
                 copy['table'] = filename
+
+            for (k, v) in defaultVars.items():
+                if k not in copy:
+                    copy[k] = v
 
             ret += [evalTmplRecurse(t) for t in explodeTemplate(copy)]
 
@@ -238,7 +242,7 @@ class BqQueryTemplatingFileLoader(FileLoader):
                     BqQueryTemplatingFileLoader.explodeTemplateVarsArray(
                         self.loadTemplateVars(
                             filePath + ".vars"), folder, filename,
-                        self.defaultDataset)
+                        self.defaultVars)
 
             except FileNotFoundError:
                 raise Exception("Please define template vars in a file "
@@ -265,31 +269,6 @@ class BqQueryTemplatingFileLoader(FileLoader):
         except JSONDecodeError:
             raise Exception("Problem reading json var list from file: ",
                             filePath)
-
-
-class BqQueryFileLoader(FileLoader):
-    def __init__(self, bqClient: Client, bqJobs: BqJobs,
-                 defaultDataset=None):
-        self.bqClient = bqClient
-        self.defaultDataset = defaultDataset
-        self.bqJobs = bqJobs
-        self.datasets = {}
-
-    def load(self, filePath):
-        mtime = getmtime(filePath)
-        bqTable = parseDatasetTable(filePath, self.defaultDataset,
-                                    self.bqClient)
-        ret = []
-        with open(filePath) as f:
-            query = f.read().format(dataset=self.defaultDataset)
-            jobForTable = self.bqJobs.getJobForTable(bqTable)
-            ret.append(BqQueryBackedTableResource(query, bqTable,
-                                                  int(mtime * 1000),
-                                                  self.bqClient,
-                                                  queryJob=jobForTable))
-            ret.append(cacheDataSet(self.bqClient, bqTable,
-                                    self.datasets))
-        return ret
 
 
 class BqViewFileLoader(FileLoader):
