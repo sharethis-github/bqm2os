@@ -45,13 +45,14 @@ class BqJobs:
     def jobs(self, state_filter=None):
         return self.bqClient.list_jobs(state_filter=state_filter)
 
-    def loadTableJobs(self):
-        logging.info("starting jobs load")
+    def __loadTableJobs__(self, state):
+        logging.info("starting jobs load for ", state)
         """ scans through 5k previous jobs and puts into
         a map keyed by project/dataset/table/ the first job
         encountered for that any table.
         """
-        iter = self.bqClient.list_jobs(max_results=self.pageSize)
+        iter = self.bqClient.list_jobs(max_results=self.pageSize,
+                                       state_filter=state)
         while True:
             for t in iter:
                 if t.destination:
@@ -65,8 +66,12 @@ class BqJobs:
             if iter.page_number > self.page_limit:
                 break
             iter = self.bqClient.list_jobs(max_results=self.pageSize,
-                                           page_token=iter.next_page_token)
-        logging.info("finished jobs load")
+                                           page_token=iter.next_page_token,
+                                           state_filter=state)
+        print("finished jobs load for ", state)
+
+    def loadTableJobs(self):
+        [self.__loadTableJobs__(state) for state in ['running', 'pending']]
 
     def getJobForTable(self, table: Table):
         key = _buildDataSetTableKey_(table)
@@ -80,6 +85,7 @@ def _buildDataSetKey_(table: Table) -> str:
     :param table: a bq table
     :return: colon concatenated project, dataset
     """
+    print(table.project, table.dataset_name)
     return ":".join([table.project, table.dataset_name])
 
 
