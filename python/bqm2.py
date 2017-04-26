@@ -112,6 +112,17 @@ class DependencyExecutor:
 
                     self.dependencies[n] = self.dependencies[n] - torm
 
+    def dotml(self):
+        print("digraph g {\n")
+        for (k, s) in sorted(self.dependencies.items()):
+            if not len(s):
+                continue
+            for n in s:
+                if len(str(n).split(".")) == 1:
+                    continue
+                print("".join(['"', k, '"']), "->", "".join(['"', n, '"']))
+        print("}")
+
     def execute(self, checkFrequency=10):
         while len(self.dependencies):
             todel = set([])
@@ -166,6 +177,9 @@ if __name__ == "__main__":
     parser.add_option("--execute", dest="execute",
                       action="store_true", default=False,
                       help="Execute the dependencies found in the resources")
+    parser.add_option("--dotml", dest="dotml",
+                      action="store_true", default=False,
+                      help="Generate dot ml graph of dag of execution")
     parser.add_option("--show", dest="show",
                       action="store_true", default=False,
                       help="Show the dependency tree")
@@ -226,6 +240,8 @@ if __name__ == "__main__":
         executor.execute(checkFrequency=options.checkFrequency)
     elif options.show:
         executor.show()
+    elif options.dotml:
+        executor.dotml()
     elif options.dumpToFolder:
         executor.dump(options.dumpToFolder)
     elif options.showJobs:

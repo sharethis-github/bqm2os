@@ -341,6 +341,7 @@ class BqQueryBackedTableResource(BqQueryBasedResource):
         query_job.destination = self.table
         query_job.priority = QueryPriority.INTERACTIVE
         query_job.write_disposition = WriteDisposition.WRITE_TRUNCATE
+        query_job.maximum_billing_tier = 2
         query_job.begin()
         self.queryJob = query_job
 
