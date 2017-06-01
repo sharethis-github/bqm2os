@@ -339,7 +339,7 @@ class BqQueryBackedTableResource(BqQueryBasedResource):
         query_job.allow_large_results = True
         query_job.flatten_results = False
         query_job.destination = self.table
-        query_job.priority = QueryPriority.INTERACTIVE
+        query_job.priority = QueryPriority.BATCH
         query_job.write_disposition = WriteDisposition.WRITE_TRUNCATE
         query_job.maximum_billing_tier = 2
         query_job.begin()
