@@ -1,6 +1,7 @@
 import uuid
 import re
 
+import sys
 from google.cloud.bigquery.client import Client
 from google.cloud.bigquery.dataset import Dataset
 from google.cloud.bigquery.job import WriteDisposition, CopyJob, \
@@ -288,7 +289,7 @@ class BqQueryBasedResource(Resource):
             return False
 
         filtered = re.sub('[^0-9a-zA-Z\._]+', ' ', self.query)
-        if strictSubstring(" ".join(["", other.key(), ""]), filtered):
+        if strictSubstring("".join(["", other.key(), " "]), filtered):
             return True
 
             # we need a better way!

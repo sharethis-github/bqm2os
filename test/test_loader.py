@@ -95,14 +95,17 @@ class Test(unittest.TestCase):
     @mock.patch('google.cloud.bigquery.Client')
     def testParseDataSetTable(self, mock_client: MagicMock):
         parseDatasetTable("a/b/dataset.table.suffix", "default",
-                              mock_client)
-        mock_client.dataset.assert_called_with('dataset')
+                              mock_client, "defaultProject")
+        mock_client.dataset.assert_called_with('dataset',
+                                               project="defaultProject")
         mock_client.dataset().table.assert_called_with('table')
 
     @mock.patch('google.cloud.bigquery.Client')
     def testParseDataSetTableWithoutDataset(self, mock_client: MagicMock):
-        parseDatasetTable("a/b/table.suffix", "dataset", mock_client)
-        mock_client.dataset.assert_called_with('dataset')
+        parseDatasetTable("a/b/table.suffix", "dataset", mock_client,
+                          "defaultProject")
+        mock_client.dataset.assert_called_with('dataset',
+                                               project="defaultProject")
         mock_client.dataset().table.assert_called_with('table')
 
     @mock.patch('google.cloud.bigquery.Client')
@@ -133,13 +136,16 @@ class Test(unittest.TestCase):
                     "yyyymmdd": [-1, 0]}
         result = BqQueryTemplatingFileLoader\
                 .explodeTemplateVarsArray([template],
-                'afolder', 'afile', {'dataset': 'adataset'})
+                'afolder', 'afile', {"dataset": "adataset",
+                                     "project": "aproject"})
         expected = [{'filename': 'afile', 'folder': 'afolder', 'dataset':
                     'adataset', 'yyyymmdd': expectedDt[1], 'foo':
-                    'bar_afolder_afile', "table": "afile"},
+                    'bar_afolder_afile', "table": "afile",
+                     "project": "aproject"},
                     {'filename': 'afile', 'folder': 'afolder', 'dataset':
                     'adataset', 'yyyymmdd': expectedDt[0], 'foo':
-                        'bar_afolder_afile', "table": "afile"}]
+                        'bar_afolder_afile', "table": "afile",
+                     "project": "aproject"}]
         self.assertEqual(result, expected)
 
     @mock.patch('google.cloud.bigquery.Client')
@@ -153,11 +159,13 @@ class Test(unittest.TestCase):
 
         loader = BqQueryTemplatingFileLoader(bqClient, bqJobs,
                                              TableType.TABLE,
-                                             {'dataset': 'default'})
+                                             {'dataset': 'default',
+                                              'project': 'aproject'})
         templateVar = {
             'table': 'atable',
             'dataset': 'adataset',
-            "foo": "bar"
+            "foo": "bar",
+
         }
         output = {}
         loader.processTemplateVar(templateVar, "select * from {foo}",

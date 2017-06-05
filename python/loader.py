@@ -1,6 +1,7 @@
 import json
 from json.decoder import JSONDecodeError
 
+import sys
 from google.cloud.bigquery.client import Client
 from google.cloud.bigquery.schema import SchemaField
 from google.cloud.bigquery.table import Table
@@ -65,15 +66,18 @@ class DelegatingFileSuffixLoader(FileLoader):
                 "Invalid file for loading: " + file + ". No suffix")
 
 
-def parseDatasetTable(filePath, defaultDataset: str, bqClient: Client) \
+def parseDatasetTable(filePath, defaultDataset: str, bqClient: Client,
+                      defaultProject: str) \
         -> Table:
     tokens = filePath.split("/")[-1].split(".")
     if len(tokens) == 3:
-        return bqClient.dataset(tokens[0]).table(tokens[1])
+        return bqClient.dataset(tokens[0], project=defaultProject)\
+                       .table(tokens[1])
     elif len(tokens) == 2:  # use default dataset
         if not defaultDataset:
             raise ValueError("Must specify a default dataset")
-        return bqClient.dataset(defaultDataset).table(tokens[0])
+        return bqClient.dataset(defaultDataset, project=defaultProject)\
+                       .table(tokens[0])
     elif len(tokens) > 3:
         raise ValueError("Invalid filename: " + filePath +
                          ". File names "
@@ -103,7 +107,7 @@ def cacheDataSet(bqClient: Client, bqTable: Table, datasets: dict):
     """
     dsetKey = _buildDataSetKey_(bqTable)
     if dsetKey not in datasets:
-        dataset = bqClient.dataset(bqTable.dataset_name)
+        dataset = bqClient.dataset(bqTable.dataset_name, bqTable.project)
         datasets[dsetKey] = BqDatasetBackedResource(dataset, 0,
                                                     bqClient)
     return datasets[dsetKey]
@@ -165,6 +169,8 @@ class BqQueryTemplatingFileLoader(FileLoader):
             copy['filename'] = filename
             if 'dataset' not in copy:
                 copy['dataset'] = defaultVars['dataset']
+            if 'project' not in copy:
+                copy['project'] = defaultVars['project']
             if 'table' not in copy:
                 copy['table'] = filename
 
@@ -205,8 +211,11 @@ class BqQueryTemplatingFileLoader(FileLoader):
         query = template.format(**templateVars)
         # print("formatting query: ", query)
         table = templateVars['table']
+        project = None
+        if 'project' in templateVars:
+            project = templateVars['project']
 
-        bqTable = self.bqClient.dataset(dataset).table(table)
+        bqTable = self.bqClient.dataset(dataset, project=project).table(table)
         key = _buildDataSetTableKey_(bqTable)
         if key in out:
             raise Exception("Templating generated duplicate "
@@ -271,32 +280,12 @@ class BqQueryTemplatingFileLoader(FileLoader):
                             filePath)
 
 
-class BqViewFileLoader(FileLoader):
-    def __init__(self, bqClient: Client, defaultDataset=None):
-        self.bqClient = bqClient
-        self.defaultDataset = defaultDataset
-        self.datasets = {}
-
-    def load(self, filePath):
-        mtime = getmtime(filePath)
-        bqTable = parseDatasetTable(filePath, self.defaultDataset,
-                                    self.bqClient)
-
-        ret = []
-        with open(filePath) as f:
-            query = f.read().format(dataset=self.defaultDataset)
-            ret.append(BqViewBackedTableResource(query, bqTable,
-                                                 int(mtime * 1000),
-                                                 self.bqClient))
-            ret.append(cacheDataSet(self.bqClient, bqTable,
-                                    self.datasets))
-            return ret
-
-
 class BqDataFileLoader(FileLoader):
-    def __init__(self, bqClient: Client, defaultDataset=None):
+    def __init__(self, bqClient: Client, defaultDataset=None,
+                 defaultProject=None):
         self.bqClient = bqClient
         self.defaultDataset = defaultDataset
+        self.defaultProject = defaultProject
         self.datasets = {}
 
     def load(self, filePath):
@@ -305,7 +294,7 @@ class BqDataFileLoader(FileLoader):
         mtime_schema = getmtime(schemaFilePath)
         mtime = max([mtime, mtime_schema])
         bqTable = parseDatasetTable(filePath, self.defaultDataset,
-                                    self.bqClient)
+                                    self.bqClient, self.defaultProject)
 
         with open(schemaFilePath) as schemaFile:
             schema = self.loadSchemaFromString(schemaFile.read().strip())

@@ -8,6 +8,7 @@ from os import listdir
 import re
 from time import sleep
 
+import sys
 from google.cloud.bigquery.client import Client
 
 from loader import DelegatingFileSuffixLoader, \
@@ -194,6 +195,9 @@ if __name__ == "__main__":
     parser.add_option("--defaultDataset", dest="defaultDataset",
                       help="The default dataset which will be used if "
                            "file definitions don't specify one")
+    parser.add_option("--defaultProject", dest="defaultProject",
+                      help="The default project which will be used if "
+                           "file definitions don't specify one")
     parser.add_option("--checkFrequency", dest="checkFrequency", type=int,
                       default=10,
                       help="The loop interval between dependency tree"
@@ -217,22 +221,30 @@ if __name__ == "__main__":
                 kwargs[k] = v
 
     client = Client()
+    if options.defaultProject:
+        kwargs["project"] = options.defaultProject
+    else:
+        kwargs["project"] = client.project
+
+    loadClient = Client(project=kwargs["project"])
+
     bqJobs = BqJobs(client)
     if options.execute:
         bqJobs.loadTableJobs()
 
     builder = DependencyBuilder(
         DelegatingFileSuffixLoader(
-            querytemplate=BqQueryTemplatingFileLoader(bigquery.Client(),
+            querytemplate=BqQueryTemplatingFileLoader(client,
                                                       bqJobs,
                                                       TableType.TABLE,
                                                       kwargs),
-            view=BqQueryTemplatingFileLoader(bigquery.Client(),
+            view=BqQueryTemplatingFileLoader(client,
                                              bqJobs,
                                              TableType.VIEW,
                                              kwargs),
-            localdata=BqDataFileLoader(bigquery.Client(),
-                                       kwargs['dataset'])))
+            localdata=BqDataFileLoader(loadClient,
+                                       kwargs['dataset'],
+                                       kwargs['project'])))
 
     (resources, dependencies) = builder.buildDepend(args)
     executor = DependencyExecutor(resources, dependencies)
