@@ -334,6 +334,9 @@ class BqQueryBackedTableResource(BqQueryBasedResource):
         self.queryJob = queryJob
 
     def create(self):
+        if self.table.exists():
+            self.table.delete()
+
         jobid = "-".join(["create", self.table.dataset_name,
                           self.table.name, str(uuid.uuid4())])
         query_job = self.bqClient.run_async_query(jobid, self.query)
