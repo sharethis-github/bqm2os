@@ -1,3 +1,4 @@
+import json
 import unittest
 
 from google.cloud.bigquery.client import Client
@@ -9,7 +10,7 @@ from loader import DelegatingFileSuffixLoader, FileLoader, \
     parseDatasetTable, \
     parseDataset, BqDataFileLoader, BqQueryTemplatingFileLoader, TableType
 from resource import BqJobs, BqViewBackedTableResource, \
-    BqQueryBackedTableResource
+    BqQueryBackedTableResource, BqDataLoadTableResource
 
 
 class Test(unittest.TestCase):
@@ -125,6 +126,13 @@ class Test(unittest.TestCase):
                                                            "b:string")
         self.assertEquals(expected, result)
 
+    def testParseSchemaJsonString(self):
+        # note, we just use any valid json here
+        # bq api will bomb out on invalid json
+        expected = []
+        result = BqDataFileLoader("dummy").loadSchemaFromString("[]")
+        self.assertEquals(expected, result)
+
     def testExplodeTemplateVarsArray(self):
         from datetime import datetime, timedelta
 
@@ -214,6 +222,35 @@ class Test(unittest.TestCase):
             self.fail("Should have thrown exception for missing dataset")
         except Exception:
             pass
+
+    def BuildJsonField(self, name: str, type: str, mode='NULLABLE',
+                       description=None, fields=None):
+
+        ret = {}
+        ret['name'] = name
+        ret['type'] = type
+
+        if mode: ret['mode'] = mode
+        if description: ret['description'] = description
+        if fields: ret['fields'] = fields
+
+        return ret
+
+    def testSimpleLoadSchemaField(self):
+        simpleField = [self.BuildJsonField("a", "float")]
+        schema = BqDataFileLoader.loadSchemaFromString({}, json.dumps(simpleField))
+        self.assertTrue(len(schema) == 1)
+        self.assertTrue(schema[0].name == "a")
+
+    def testComplexLoadSchemaField(self):
+        recordFields = [self.BuildJsonField("b", "float")]
+        jsonFields = [
+            self.BuildJsonField("c", "string", "repeated"),
+            self.BuildJsonField("a", "record",
+                                          fields=recordFields,
+                                          mode='repeated')]
+        print (json.dumps(jsonFields))
+        schema = BqDataFileLoader.loadSchemaFromString({}, json.dumps(jsonFields))
 
 if __name__ == '__main__':
     unittest.main()

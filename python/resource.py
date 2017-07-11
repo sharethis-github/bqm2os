@@ -1,11 +1,14 @@
+import json
 import uuid
 import re
 
 import sys
+from json.decoder import JSONDecodeError
+
 from google.cloud.bigquery.client import Client
 from google.cloud.bigquery.dataset import Dataset
 from google.cloud.bigquery.job import WriteDisposition, CopyJob, \
-    QueryPriority, QueryJob
+    QueryPriority, QueryJob, SourceFormat
 import time
 from google.cloud.bigquery.table import Table
 import logging
@@ -212,10 +215,19 @@ class BqDataLoadTableResource(Resource):
 
     def create(self):
         self.table.schema = self.schema
-        # self.table.create()
+
+        fieldDelimiter = '\t'
+        with open(self.file, 'r') as readable:
+            srcFormat = BqDataLoadTableResource.detectSourceFormat(
+                                                readable.readline())
+            if srcFormat != SourceFormat.CSV:
+                fieldDelimiter = None
+
         with open(self.file, 'rb') as readable:
             ret = self.table.upload_from_file(
-                readable, source_format='CSV', field_delimiter='\t',
+                readable, source_format=srcFormat,
+                field_delimiter=fieldDelimiter,
+                ignore_unknown_values=True,
                 write_disposition=WriteDisposition.WRITE_TRUNCATE)
             wait_for_job(ret)
 
@@ -231,6 +243,13 @@ class BqDataLoadTableResource(Resource):
     def __str__(self):
         return "localdata:" + ".".join([self.table.dataset_name,
                                         self.table.name])
+
+    def detectSourceFormat(firstFileLine: str):
+        try:
+            json.loads(firstFileLine)
+            return SourceFormat.NEWLINE_DELIMITED_JSON
+        except JSONDecodeError:
+            return SourceFormat.CSV
 
 
 def makeJobName(parts: list):

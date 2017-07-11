@@ -5,14 +5,14 @@ from unittest.mock import Mock
 import mock
 from google.cloud.bigquery.client import Client
 from google.cloud.bigquery.dataset import Dataset
-from google.cloud.bigquery.job import QueryJob
+from google.cloud.bigquery.job import QueryJob, SourceFormat
 from google.cloud.bigquery.table import Table
 from google.cloud.iterator import Iterator
 
 import resource
 from resource import strictSubstring, Resource, \
     BqDatasetBackedResource, BqViewBackedTableResource, \
-    BqQueryBasedResource, BqJobs
+    BqQueryBasedResource, BqJobs, BqDataLoadTableResource
 
 
 class Test(unittest.TestCase):
@@ -202,3 +202,16 @@ group each by id, description, url
 
         jobs.__loadTableJobs__('running')
         self.assertEquals(jobs.tableToJobMap['p:d:t'], job)
+
+
+    def testDetectSourceFormatForJson(self):
+        self.assertEquals(
+            SourceFormat.NEWLINE_DELIMITED_JSON,
+            BqDataLoadTableResource.detectSourceFormat("[]"))
+
+    def testDetectSourceFormatForCsv(self):
+        self.assertEquals(
+            SourceFormat.CSV,
+            BqDataLoadTableResource.detectSourceFormat(
+            "a"))
+

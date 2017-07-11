@@ -1,0 +1,17 @@
+select url, kw from flatten((
+SELECT
+    SPLIT(REGEXP_REPLACE(keywords.text, r'(_|-)+', ' '), " ") kw, url
+  FROM
+    FLATTEN((
+      SELECT
+        url,
+        keywords.text,
+        estidAccepted
+      FROM
+        TABLE_DATE_RANGE([sharethis.com:quixotic-spot-526:mergelog.v1_], DATE_ADD(CURRENT_TIMESTAMP(), -1, 'DAY'), DATE_ADD(CURRENT_TIMESTAMP(), -1, 'DAY'))
+      WHERE
+        keywords.text IS NOT NULL
+        AND estidAccepted
+        AND FLOAT(keywords.score) > 0.5), keywords)
+), kw)
+group each by url, kw

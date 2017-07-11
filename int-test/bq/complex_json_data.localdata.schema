@@ -1,0 +1,19 @@
+[
+  {
+    "mode": "repeated",
+    "name": "c",
+    "type": "string"
+  },
+  {
+    "mode": "repeated",
+    "fields": [
+      {
+        "mode": "NULLABLE",
+        "name": "b",
+        "type": "float"
+      }
+    ],
+    "name": "a",
+    "type": "record"
+  }
+]

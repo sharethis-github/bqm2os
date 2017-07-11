@@ -311,6 +311,14 @@ class BqDataFileLoader(FileLoader):
         """ only support simple schema for i.e. not json just cmd line
         like format """
 
+        # first we try to load as json
+        try:
+            fields = [BqDataFileLoader.loadSchemaField(jsonField)
+                      for jsonField in json.loads(schema)]
+            return fields
+        except JSONDecodeError:
+            pass
+
         try:
             ret = []
             for s in schema.split(","):
@@ -318,7 +326,30 @@ class BqDataFileLoader(FileLoader):
                 ret.append(SchemaField(col, type))
             return ret
         except ValueError:
-            raise Exception("Schema string should follow format "
+            raise Exception("Schema file should contain either bq "
+                            "json schema definition or a string "
+                            "following the"
+                            "format "
                             "col:type," +
-                            "col2:type...json schema not supported at "
-                            "the moment")
+                            "col2:type.")
+
+    def loadSchemaField(jsonField: dict):
+        lMapping = {k.lower(): k for k in jsonField}
+        mode = 'NULLABLE'
+        if "mode" in lMapping:
+            mode = jsonField[lMapping['mode']]
+
+        description = None
+        if "description" in lMapping:
+            description = jsonField[lMapping['description']]
+
+        fields = None
+        if "fields" in lMapping:
+            fields = [BqDataFileLoader.loadSchemaField(x)
+                      for x in jsonField[lMapping['fields']]]
+
+        return SchemaField(jsonField[lMapping["name"]],
+                           jsonField[lMapping["type"]],
+                           mode=mode,
+                           description=description,
+                           fields=fields)
