@@ -8,7 +8,7 @@ SELECT
         keywords.text,
         estidAccepted
       FROM
-        TABLE_DATE_RANGE([sharethis.com:quixotic-spot-526:mergelog.v1_], DATE_ADD(CURRENT_TIMESTAMP(), -1, 'DAY'), DATE_ADD(CURRENT_TIMESTAMP(), -1, 'DAY'))
+        TABLE_DATE_RANGE([sharethis.com:quixotic-spot-526:mergelog.v1_], DATE_ADD(CURRENT_TIMESTAMP(), -2, 'DAY'), DATE_ADD(CURRENT_TIMESTAMP(), -2, 'DAY'))
       WHERE
         keywords.text IS NOT NULL
         AND estidAccepted

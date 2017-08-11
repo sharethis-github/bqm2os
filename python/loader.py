@@ -343,7 +343,7 @@ class BqDataFileLoader(FileLoader):
         if "description" in lMapping:
             description = jsonField[lMapping['description']]
 
-        fields = None
+        fields = ()
         if "fields" in lMapping:
             fields = [BqDataFileLoader.loadSchemaField(x)
                       for x in jsonField[lMapping['fields']]]
