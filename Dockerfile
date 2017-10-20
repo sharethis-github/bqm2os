@@ -17,4 +17,5 @@ RUN pip install frozendict
 RUN pip install --upgrade awscli
 RUN pip install google-api-python-client coverage boto boto3 pep8 requests mock || exit 1
 RUN pip install --upgrade google-cloud-bigquery
+RUN pip install --upgrade google-cloud-storage
 ADD /python /python

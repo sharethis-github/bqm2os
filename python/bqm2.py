@@ -8,7 +8,7 @@ from os import listdir
 import re
 from time import sleep
 
-import sys
+from google.cloud import storage
 from google.cloud.bigquery.client import Client
 
 from loader import DelegatingFileSuffixLoader, \
@@ -124,7 +124,8 @@ class DependencyExecutor:
                 print("".join(['"', k, '"']), "->", "".join(['"', n, '"']))
         print("}")
 
-    def execute(self, checkFrequency=10):
+    def execute(self, checkFrequency=10, maxConcurrent=10):
+        running = set([])
         while len(self.dependencies):
             todel = set([])
             for n in sorted(self.dependencies.keys()):
@@ -133,27 +134,32 @@ class DependencyExecutor:
 
             """ flag to capture if anything was running.  If so,
             we will pause before looping again """
-            running = False
             for n in sorted(todel):
                 if (self.resources[n].isRunning()):
                     print(self.resources[n], "already running")
-                    running = True
+                    running.add(n)
                     continue
                 if not self.resources[n].exists():
                     print("executing: because it doesn't exist ", n)
                     self.resources[n].create()
-                    running = True
+                    running.add(n)
                 elif self.resources[n].definitionTime() \
                         > self.resources[n].updateTime():
                     print("executing: because its definition is newer "
                           "than last created ",
                           n, self.resources[n])
                     self.resources[n].create()
-                    running = True
+                    running.add(n)
                 else:
                     print(self.resources[n],
                           " resource exists and is up to date")
                     del self.dependencies[n]
+                    if n in running:
+                        running.remove(n)
+
+                if len(running) >= maxConcurrent:
+                    print("max concurrent running already")
+                    break
 
             for n in sorted(self.dependencies.keys()):
                 torm = set([])
@@ -169,7 +175,7 @@ class DependencyExecutor:
                 self.dependencies[n] = self.dependencies[n] - torm
 
             if len(self.dependencies):
-                if running:
+                if len(running):
                     sleep(checkFrequency)
 
 
@@ -195,6 +201,8 @@ if __name__ == "__main__":
     parser.add_option("--defaultDataset", dest="defaultDataset",
                       help="The default dataset which will be used if "
                            "file definitions don't specify one")
+    parser.add_option("--maxConcurrent", dest="maxConcurrent", type=int,
+                      default=20)
     parser.add_option("--defaultProject", dest="defaultProject",
                       help="The default project which will be used if "
                            "file definitions don't specify one")
@@ -227,6 +235,7 @@ if __name__ == "__main__":
         kwargs["project"] = client.project
 
     loadClient = Client(project=kwargs["project"])
+    gcsClient = storage.Client(project=kwargs["project"])
 
     bqJobs = BqJobs(client)
     if options.execute:
@@ -234,11 +243,11 @@ if __name__ == "__main__":
 
     builder = DependencyBuilder(
         DelegatingFileSuffixLoader(
-            querytemplate=BqQueryTemplatingFileLoader(client,
+            querytemplate=BqQueryTemplatingFileLoader(client, gcsClient,
                                                       bqJobs,
                                                       TableType.TABLE,
                                                       kwargs),
-            view=BqQueryTemplatingFileLoader(client,
+            view=BqQueryTemplatingFileLoader(client, gcsClient,
                                              bqJobs,
                                              TableType.VIEW,
                                              kwargs),
@@ -249,7 +258,8 @@ if __name__ == "__main__":
     (resources, dependencies) = builder.buildDepend(args)
     executor = DependencyExecutor(resources, dependencies)
     if options.execute:
-        executor.execute(checkFrequency=options.checkFrequency)
+        executor.execute(checkFrequency=options.checkFrequency,
+                         maxConcurrent=options.maxConcurrent)
     elif options.show:
         executor.show()
     elif options.dotml:

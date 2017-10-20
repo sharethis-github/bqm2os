@@ -3,6 +3,8 @@ import unittest
 
 from google.cloud.bigquery.client import Client
 from google.cloud.bigquery.schema import SchemaField
+from google.cloud import storage
+
 import mock
 from mock.mock import MagicMock
 
@@ -156,16 +158,18 @@ class Test(unittest.TestCase):
                      "project": "aproject"}]
         self.assertEqual(result, expected)
 
+
     @mock.patch('google.cloud.bigquery.Client')
+    @mock.patch('google.cloud.storage.Client')
     @mock.patch('resource.BqJobs')
-    def testProcessTemplateVarHappyPath(self, bqClient, bqJobs):
+    def testProcessTemplateVarHappyPath(self, bqClient, bqJobs, gcsClient):
 
         bqClient.dataset('adataset').table('atable').name = 'atable'
         bqClient.dataset('adataset').table('atable').dataset_name = \
             'adataset'
         bqClient.dataset('adataset').table('atable').project = 'aproject'
 
-        loader = BqQueryTemplatingFileLoader(bqClient, bqJobs,
+        loader = BqQueryTemplatingFileLoader(bqClient, gcsClient, bqJobs,
                                              TableType.TABLE,
                                              {'dataset': 'default',
                                               'project': 'aproject'})
@@ -184,13 +188,14 @@ class Test(unittest.TestCase):
         self.assertEqual(arsrc.query, "select * from bar")
 
     @mock.patch('google.cloud.bigquery.Client')
+    @mock.patch('google.cloud.storage.Client')
     @mock.patch('resource.BqJobs')
-    def testProcessTemplateVarMissingDataset(self, bqClient, bqJobs):
+    def testProcessTemplateVarMissingDataset(self, bqClient, bqJobs,
+                                             gcsClient):
 
         # templateVars: dict, template: str,
         # filePath: str, mtime: int, out: dict
-
-        loader = BqQueryTemplatingFileLoader(bqClient, bqJobs,
+        loader = BqQueryTemplatingFileLoader(bqClient, gcsClient, bqJobs,
                                              TableType.TABLE,{})
         templateVar = {
             'table': 'atable',
@@ -204,13 +209,15 @@ class Test(unittest.TestCase):
             pass
 
     @mock.patch('google.cloud.bigquery.Client')
+    @mock.patch('google.cloud.storage.Client')
     @mock.patch('resource.BqJobs')
-    def testProcessTemplateVarMissingTable(self, bqClient, bqJobs):
+    def testProcessTemplateVarMissingTable(self, bqClient, bqJobs,
+                                           gcsClient):
 
         # templateVars: dict, template: str,
         # filePath: str, mtime: int, out: dict
 
-        loader = BqQueryTemplatingFileLoader(bqClient, bqJobs,
+        loader = BqQueryTemplatingFileLoader(bqClient, gcsClient, bqJobs,
                                              TableType.TABLE, 'default')
         templateVar = {
             'dataset': 'adataset',

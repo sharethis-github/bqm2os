@@ -2,13 +2,15 @@ import json
 import uuid
 import re
 
-import sys
 from json.decoder import JSONDecodeError
 
+from google.cloud import storage
 from google.cloud.bigquery.client import Client
 from google.cloud.bigquery.dataset import Dataset
 from google.cloud.bigquery.job import WriteDisposition, CopyJob, \
-    QueryPriority, QueryJob, SourceFormat
+    QueryPriority, QueryJob, SourceFormat, \
+    ExtractTableToStorageJob, Compression, \
+    DestinationFormat
 import time
 from google.cloud.bigquery.table import Table
 import logging
@@ -60,7 +62,9 @@ class BqJobs:
         while True:
             for t in iter:
                 if t.destination:
-                    tableKey = _buildDataSetTableKey_(t.destination)
+                    tableKey = _buildDataSetKey_(t.destination)
+                    print(tableKey + " was found in " + state)
+                    print(str(t.destination.project))
                     if tableKey in self.tableToJobMap:
                         continue
                     self.tableToJobMap[tableKey] = t
@@ -78,7 +82,7 @@ class BqJobs:
         [self.__loadTableJobs__(state) for state in ['running', 'pending']]
 
     def getJobForTable(self, table: Table):
-        key = _buildDataSetTableKey_(table)
+        key = _buildDataSetKey_(table)
         if key in self.tableToJobMap:
             return self.tableToJobMap[key]
         return None
@@ -325,6 +329,7 @@ class BqViewBackedTableResource(BqQueryBasedResource):
         self.table.view_query = self.query
         if (self.table.exists()):
             self.table.delete()
+        self.table.schema = []
         self.table.create()
 
     def isRunning(self):
@@ -362,7 +367,7 @@ class BqQueryBackedTableResource(BqQueryBasedResource):
         query_job.allow_large_results = True
         query_job.flatten_results = False
         query_job.destination = self.table
-        query_job.priority = QueryPriority.BATCH
+        query_job.priority = QueryPriority.INTERACTIVE
         query_job.write_disposition = WriteDisposition.WRITE_TRUNCATE
         query_job.maximum_billing_tier = 2
         query_job.begin()
@@ -388,6 +393,87 @@ class BqQueryBackedTableResource(BqQueryBasedResource):
         return self.query
 
 
+class BqExtractTableResource(Resource):
+    def __init__(self,
+                 table: Table,
+                 defTime: int,
+                 bqClient: Client,
+                 gcsClient: storage.Client,
+                 extractJob: ExtractTableToStorageJob,
+                 uris: str,
+                 compression=Compression.GZIP,
+                 destinationFormat=DestinationFormat.NEWLINE_DELIMITED_JSON):
+
+        self.extractJob = extractJob
+        self.defTime = defTime
+        self.table = table
+        self.bqClient = bqClient
+        self.gcsClient = gcsClient
+        self.uris = uris
+        # check uris
+        (self.bucket, self.pathPrefix) = self.parseBucketAndPrefix(uris)
+        self.compression = compression
+        self.destinationFormat = destinationFormat
+
+    def create(self):
+        jobid = "-".join(["extract", self.table.name,
+                          self.table.name, str(uuid.uuid4())])
+        self.extractJob = self.bqClient.extract_table_to_storage(jobid,
+                                                                 self.table,
+                                                                 self.uris)
+        self.extractJob.destination_format = self.destinationFormat
+        self.extractJob.compression = self.compression
+        self.extractJob.begin()
+
+    def key(self):
+        return ".".join(["extract", self.table.dataset_name,
+                         self.table.name])
+
+    def isRunning(self):
+        if self.extractJob:
+            self.extractJob.reload()
+            print(self.extractJob.name,
+                  self.extractJob.state, self.extractJob.errors)
+            return self.extractJob.state in ['RUNNING', 'PENDING']
+        else:
+            return False
+
+    def __str__(self):
+        return "extract:" + ".".join([self.table.dataset_name,
+                                     self.table.name])
+
+    def exists(self):
+        bucket = self.gcsClient.get_bucket(self.bucket)
+        objs = [x for x in bucket.list_blobs(1, prefix=self.pathPrefix,
+                                             delimiter="/")]
+        return len(objs) > 0
+
+    def dependsOn(self, other: Resource):
+        return "extract." + other.key() == self.key()
+
+    def dump(self):
+        return ",".join(self.uris)
+
+    def definitionTime(self):
+        """ Time in milliseconds """
+        return self.defTime
+
+    def updateTime(self):
+        objs = [int(o.updated.timestamp() * 1000) for o in
+                self.gcsClient.bucket(self.bucket).list_blobs(
+                prefix=self.pathPrefix)]
+
+        if len(objs) == 0:
+            return self.defTime
+
+        return max(objs)
+
+    def parseBucketAndPrefix(self, uris):
+        bucket = uris.replace("gs://", "").split("/")[0]
+        prefix = "/".join(uris.replace("gs://", "").split("/")[:-2])
+        return (bucket, prefix)
+
+
 def wait_for_job(job: QueryJob):
     while True:
         job.reload()  # Refreshes the state via a GET request.
@@ -397,3 +483,19 @@ def wait_for_job(job: QueryJob):
                 raise RuntimeError(job.errors)
             return
         time.sleep(1)
+
+
+def export_data_to_gcs(dataset_name, table_name, destination):
+    bigquery_client = Client()
+    dataset = bigquery_client.dataset(dataset_name)
+    table = dataset.table(table_name)
+    job_name = str(uuid.uuid4())
+
+    job = bigquery_client.extract_table_to_storage(
+        job_name, table, destination)
+
+    job.begin()
+    job.result()  # Wait for job to complete
+
+    print('Exported {}:{} to {}'.format(
+        dataset_name, table_name, destination))

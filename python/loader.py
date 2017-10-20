@@ -1,17 +1,18 @@
 import json
 from json.decoder import JSONDecodeError
 
-import sys
 from google.cloud.bigquery.client import Client
 from google.cloud.bigquery.schema import SchemaField
 from google.cloud.bigquery.table import Table
 from os.path import getmtime
 from enum import Enum
+from google.cloud import storage
 
 import tmplhelper
 from resource import Resource, _buildDataSetKey_, BqDatasetBackedResource, \
     BqJobs, BqQueryBackedTableResource, _buildDataSetTableKey_, \
-    BqViewBackedTableResource, BqDataLoadTableResource
+    BqViewBackedTableResource, BqDataLoadTableResource, \
+    BqExtractTableResource
 from tmplhelper import evalTmplRecurse, explodeTemplate
 
 
@@ -116,6 +117,7 @@ def cacheDataSet(bqClient: Client, bqTable: Table, datasets: dict):
 class TableType(Enum):
     VIEW = 1
     TABLE = 2
+    TABLE_EXTRACT = 3
 
 
 class BqQueryTemplatingFileLoader(FileLoader):
@@ -141,7 +143,8 @@ class BqQueryTemplatingFileLoader(FileLoader):
     reality
     """
 
-    def __init__(self, bqClient: Client, bqJobs: BqJobs, tableType:
+    def __init__(self, bqClient: Client, gcsClient: storage.Client,
+                 bqJobs: BqJobs, tableType:
                  TableType, defaultVars={}):
         """
 
@@ -151,6 +154,7 @@ class BqQueryTemplatingFileLoader(FileLoader):
         :param defaultDataset: A default dataset to use in templates
         """
         self.bqClient = bqClient
+        self.gcsClient = gcsClient
         self.defaultVars = defaultVars
         self.bqJobs = bqJobs
         self.datasets = {}
@@ -228,6 +232,18 @@ class BqQueryTemplatingFileLoader(FileLoader):
                                                self.bqClient,
                                                queryJob=jT)
             out[key] = arsrc
+            # check if there is extraction logic
+            if 'extract' in templateVars:
+                extractRsrc = BqExtractTableResource(bqTable,
+                                                     int(mtime*1000),
+                                                     self.bqClient,
+                                                     self.gcsClient, None,
+                                                     templateVars[
+                                                         'extract']
+                                                     )
+                # need to check for duplicates here
+                # todo
+                out[extractRsrc.key()] = extractRsrc
         elif self.tableType == TableType.VIEW:
             arsrc = BqViewBackedTableResource(query, bqTable,
                                               int(mtime * 1000),

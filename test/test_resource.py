@@ -3,11 +3,11 @@ from unittest import TestCase
 from unittest.mock import Mock
 
 import mock
+from google.api.core.page_iterator import Iterator
 from google.cloud.bigquery.client import Client
 from google.cloud.bigquery.dataset import Dataset
 from google.cloud.bigquery.job import QueryJob, SourceFormat
 from google.cloud.bigquery.table import Table
-from google.cloud.iterator import Iterator
 
 import resource
 from resource import strictSubstring, Resource, \
