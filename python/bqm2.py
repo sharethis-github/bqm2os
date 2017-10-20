@@ -202,7 +202,7 @@ if __name__ == "__main__":
                       help="The default dataset which will be used if "
                            "file definitions don't specify one")
     parser.add_option("--maxConcurrent", dest="maxConcurrent", type=int,
-                      default=20)
+                      default=10)
     parser.add_option("--defaultProject", dest="defaultProject",
                       help="The default project which will be used if "
                            "file definitions don't specify one")
