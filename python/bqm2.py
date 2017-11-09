@@ -224,7 +224,7 @@ if __name__ == "__main__":
                            " evaluation runs")
 
     parser.add_option("--maxRetry", dest="maxRetry", type=int,
-                      default=10,
+                      default=2,
                       help="The maximum retries for any single resource "
                            "creation")
 
