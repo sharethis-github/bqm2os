@@ -62,7 +62,7 @@ class BqJobs:
         while True:
             for t in iter:
                 if t.destination:
-                    tableKey = _buildDataSetKey_(t.destination)
+                    tableKey = _buildDataSetTableKey_(t.destination)
                     print(tableKey + " was found in " + state)
                     print(str(t.destination.project))
                     if tableKey in self.tableToJobMap:

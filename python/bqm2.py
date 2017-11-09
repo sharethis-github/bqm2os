@@ -8,6 +8,7 @@ from os import listdir
 import re
 from time import sleep
 
+from collections import defaultdict
 from google.cloud import storage
 from google.cloud.bigquery.client import Client
 
@@ -55,9 +56,10 @@ class DependencyBuilder:
 class DependencyExecutor:
     """ """
 
-    def __init__(self, resources, dependencies):
+    def __init__(self, resources, dependencies, maxRetry=2):
         self.resources = resources
         self.dependencies = dependencies
+        self.maxRetry = maxRetry
 
     def dump(self, folder):
         """ dump expanded templates to a folder """
@@ -124,8 +126,15 @@ class DependencyExecutor:
                 print("".join(['"', k, '"']), "->", "".join(['"', n, '"']))
         print("}")
 
+    def handleRetries(self, retries, rsrcKey):
+        retries[rsrcKey] -= 1
+        if retries[rsrcKey] < 0:
+            raise Exception("Maximum retries hit for resource",
+                            rsrcKey)
+
     def execute(self, checkFrequency=10, maxConcurrent=10):
         running = set([])
+        retries = defaultdict(lambda: self.maxRetry)
         while len(self.dependencies):
             todel = set([])
             for n in sorted(self.dependencies.keys()):
@@ -140,11 +149,14 @@ class DependencyExecutor:
                     running.add(n)
                     continue
                 if not self.resources[n].exists():
+                    self.handleRetries(retries, n)
                     print("executing: because it doesn't exist ", n)
                     self.resources[n].create()
                     running.add(n)
+
                 elif self.resources[n].definitionTime() \
                         > self.resources[n].updateTime():
+                    self.handleRetries(retries, n)
                     print("executing: because its definition is newer "
                           "than last created ",
                           n, self.resources[n])
@@ -211,6 +223,11 @@ if __name__ == "__main__":
                       help="The loop interval between dependency tree"
                            " evaluation runs")
 
+    parser.add_option("--maxRetry", dest="maxRetry", type=int,
+                      default=2,
+                      help="The maximum retries for any single resource "
+                           "creation")
+
     parser.add_option("--varsFile", dest="varsFile", type=str,
                       help="A json file whose data can be refered to in "
                            "view and query templates.  Must be a simple "
@@ -256,7 +273,8 @@ if __name__ == "__main__":
                                        kwargs['project'])))
 
     (resources, dependencies) = builder.buildDepend(args)
-    executor = DependencyExecutor(resources, dependencies)
+    executor = DependencyExecutor(resources, dependencies,
+                                  maxRetry=options.maxRetry)
     if options.execute:
         executor.execute(checkFrequency=options.checkFrequency,
                          maxConcurrent=options.maxConcurrent)
