@@ -273,7 +273,8 @@ if __name__ == "__main__":
                                        kwargs['project'])))
 
     (resources, dependencies) = builder.buildDepend(args)
-    executor = DependencyExecutor(resources, dependencies)
+    executor = DependencyExecutor(resources, dependencies,
+                                  maxRetry=options.maxRetry)
     if options.execute:
         executor.execute(checkFrequency=options.checkFrequency,
                          maxConcurrent=options.maxConcurrent)
