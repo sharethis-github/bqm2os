@@ -183,8 +183,8 @@ class Test(unittest.TestCase):
         loader.processTemplateVar(templateVar, "select * from {foo}",
                               "filepath", 0, output)
         self.assertTrue(len(output))
-        self.assertTrue("aproject:adataset:atable" in output)
-        arsrc = output["aproject:adataset:atable"]
+        self.assertTrue("adataset:atable" in output)
+        arsrc = output["adataset:atable"]
         self.assertEqual(arsrc.query, "select * from bar")
 
     @mock.patch('google.cloud.bigquery.Client')

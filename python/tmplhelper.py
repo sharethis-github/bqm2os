@@ -66,6 +66,8 @@ def handleDayDateField(dt: datetime, val) -> str:
         for v in range(int(val[0]), int(val[1]) + 1):
             newdate = dt + timedelta(days=v)
             toFormat.append(newdate)
+    elif isinstance(val, str):
+        return [val]
     else:
         raise Exception("Invalid datetime values to fill out.  Must "
                         "be int or 2 element array of ints")

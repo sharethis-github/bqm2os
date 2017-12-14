@@ -82,7 +82,7 @@ class BqJobs:
         [self.__loadTableJobs__(state) for state in ['running', 'pending']]
 
     def getJobForTable(self, table: Table):
-        key = _buildDataSetKey_(table)
+        key = _buildDataSetTableKey_(table)
         if key in self.tableToJobMap:
             return self.tableToJobMap[key]
         return None
@@ -93,7 +93,7 @@ def _buildDataSetKey_(table: Table) -> str:
     :param table: a bq table
     :return: colon concatenated project, dataset
     """
-    return ":".join([table.project, table.dataset_name])
+    return ":".join([table.dataset_name])
 
 
 def _buildDataSetTableKey_(table: Table) -> str:
