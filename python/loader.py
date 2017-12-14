@@ -62,7 +62,7 @@ class DelegatingFileSuffixLoader(FileLoader):
     def suffix(self, file):
         try:
             return file.split("/")[-1].split(".")[-1]
-        except:
+        except BaseException:
             raise ValueError(
                 "Invalid file for loading: " + file + ". No suffix")
 

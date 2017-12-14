@@ -38,7 +38,6 @@ class DependencyBuilder:
             for name in listdir(folder):
                 file = "/".join([folder, name])
                 if isfile(file) and self.loader.handles(file):
-                    l = self.loader.load(file)
                     for rsrc in self.loader.load(file):
                         resources[rsrc.key()] = rsrc
 

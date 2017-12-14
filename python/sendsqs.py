@@ -1,5 +1,4 @@
 
-
 import optparse
 import sys
 import boto3
@@ -17,6 +16,7 @@ def send_message(queue: str, message: str, sqs):
         return queue.send_message(MessageBody=message)
     else:
         return None
+
 
 if __name__ == "__main__":
     parser = optparse.OptionParser("<sqs-queue> <message>")
