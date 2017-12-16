@@ -10,7 +10,7 @@ from google.cloud.bigquery.dataset import Dataset
 from google.cloud.bigquery.job import WriteDisposition, CopyJob, \
     QueryPriority, QueryJob, SourceFormat, \
     ExtractTableToStorageJob, Compression, \
-    DestinationFormat
+    DestinationFormat, LoadTableFromStorageJob
 import time
 from google.cloud.bigquery.table import Table
 import logging
@@ -186,7 +186,6 @@ class BqDatasetBackedResource(Resource):
     def __str__(self):
         return ":".join([self.dataset.project, self.dataset.name])
 
-
 class BqDataLoadTableResource(Resource):
     """ todo: currently we block during the creation of this
     table but we should probably treat this just like any table
@@ -259,8 +258,70 @@ class BqDataLoadTableResource(Resource):
 def makeJobName(parts: list):
     return "-".join(parts + [str(uuid.uuid4())])
 
+# base resource class for all table back resources
+class BqTableBasedResource(Resource):
+    """ Base class of query based big query actions """
+    def __init__(self, table: Table,
+                 defTime: int, bqClient: Client):
+        self.table = table
+        self.bqClient = bqClient
+        self.defTime = defTime
 
-class BqQueryBasedResource(Resource):
+    def exists(self):
+        return self.table.exists()
+
+    def updateTime(self):
+        """ time in milliseconds.  None if not created """
+        self.table.reload()
+        createdTime = self.table.modified
+
+        if createdTime:
+            return int(createdTime.strftime("%s")) * 1000
+        return None
+
+    def definitionTime(self):
+        """ Time in milliseconds """
+        return self.defTime
+
+    def create(self):
+        raise Exception("implement")
+
+    def key(self):
+        return ".".join([self.table.dataset_name,
+                         self.table.name])
+
+    def dependsOn(self, other: Resource):
+        raise Exception("implement this function")
+
+    def isRunning(self):
+        raise Exception("implement this function")
+
+class BqGcsTableLoadResource(BqTableBasedResource):
+    # LoadTableFromStorageJob
+    def __init__(self, table: Table,
+                 defTime: int, bqClient: Client,
+                 job: LoadTableFromStorageJob,
+                 uris: tuple,
+                 schema: tuple):
+        super(BqGcsTableLoadResource, self)\
+            .__init__(table, defTime, bqClient)
+        self.job = job
+
+    def isRunning(self):
+        isJobRunning(self.job)
+
+    def create(self):
+        jobid = "-".join(["create", self.table.dataset_name,
+                          self.table.name, str(uuid.uuid4())])
+        self.job = LoadTableFromStorageJob(jobid, self.table,
+                                           self.source_uris,
+                                           self.client,
+                                           self.schema)
+        self.job.begin()
+
+
+
+class BqQueryBasedResource(BqTableBasedResource):
     """ Base class of query based big query actions """
     def __init__(self, query: str, table: Table,
                  defTime: int, bqClient: Client):
@@ -269,8 +330,6 @@ class BqQueryBasedResource(Resource):
         self.bqClient = bqClient
         self.defTime = defTime
 
-    def exists(self):
-        return self.table.exists()
 
     def updateTime(self):
         """ time in milliseconds.  None if not created """
@@ -373,6 +432,48 @@ class BqQueryBackedTableResource(BqQueryBasedResource):
         query_job.begin()
         self.queryJob = query_job
 
+    # def key(self):
+    #     return ".".join([self.table.dataset_name, self.table.name])
+
+    def isRunning(self):
+        if self.queryJob:
+            self.queryJob.reload()
+            print(self.queryJob.name,
+                  self.queryJob.state, self.queryJob.errors)
+            return self.queryJob.state in ['RUNNING', 'PENDING']
+        else:
+            return False
+
+    def __str__(self):
+        return "bqtable:" + ".".join([self.table.dataset_name,
+                                     self.table.name, "${query}"])
+
+    def dump(self):
+        return self.query
+
+class BqQueryBackedTableResource(BqQueryBasedResource):
+    def __init__(self, query: str, table: Table,
+                 defTime: int, bqClient: Client, queryJob: QueryJob):
+        super(BqQueryBackedTableResource, self)\
+            .__init__(query, table, defTime, bqClient)
+        self.queryJob = queryJob
+
+    def create(self):
+        if self.table.exists():
+            self.table.delete()
+
+        jobid = "-".join(["create", self.table.dataset_name,
+                          self.table.name, str(uuid.uuid4())])
+        query_job = self.bqClient.run_async_query(jobid, self.query)
+        query_job.allow_large_results = True
+        query_job.flatten_results = False
+        query_job.destination = self.table
+        query_job.priority = QueryPriority.INTERACTIVE
+        query_job.write_disposition = WriteDisposition.WRITE_TRUNCATE
+        query_job.maximum_billing_tier = 2
+        query_job.begin()
+        self.queryJob = query_job
+
     def key(self):
         return ".".join([self.table.dataset_name, self.table.name])
 
@@ -391,7 +492,6 @@ class BqQueryBackedTableResource(BqQueryBasedResource):
 
     def dump(self):
         return self.query
-
 
 class BqExtractTableResource(Resource):
     def __init__(self,
@@ -499,3 +599,12 @@ def export_data_to_gcs(dataset_name, table_name, destination):
 
     print('Exported {}:{} to {}'.format(
         dataset_name, table_name, destination))
+
+def isJobRunning(job):
+    if job:
+        job.reload()
+        print(job.name,
+              job.state, job.errors)
+        return job.state in ['RUNNING', 'PENDING']
+    else:
+        return False

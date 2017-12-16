@@ -2,6 +2,7 @@ import json
 from json.decoder import JSONDecodeError
 
 from google.cloud.bigquery.client import Client
+from google.cloud.bigquery.job import LoadTableFromStorageJob
 from google.cloud.bigquery.schema import SchemaField
 from google.cloud.bigquery.table import Table
 from os.path import getmtime
@@ -12,7 +13,7 @@ import tmplhelper
 from resource import Resource, _buildDataSetKey_, BqDatasetBackedResource, \
     BqJobs, BqQueryBackedTableResource, _buildDataSetTableKey_, \
     BqViewBackedTableResource, BqDataLoadTableResource, \
-    BqExtractTableResource
+    BqExtractTableResource, BqGcsTableLoadResource
 from tmplhelper import evalTmplRecurse, explodeTemplate
 
 
@@ -118,6 +119,7 @@ class TableType(Enum):
     VIEW = 1
     TABLE = 2
     TABLE_EXTRACT = 3
+    TABLE_GCS_LOAD = 4
 
 
 class BqQueryTemplatingFileLoader(FileLoader):
@@ -250,6 +252,21 @@ class BqQueryTemplatingFileLoader(FileLoader):
                                               self.bqClient)
             out[key] = arsrc
 
+        elif self.tableType == TableType.TABLE_GCS_LOAD:
+            jT = self.bqJobs.getJobForTable(bqTable)
+            uris = tuple([uri for uri in query.split("\n") if
+                          uri.startswith("gs://")])
+
+            with open(filePath + ".schema") as schemaFile:
+                schema = loadSchemaFromString(schemaFile.read().strip())
+
+            rsrc = BqGcsTableLoadResource(table, int(mtime*1000),
+                                          self.bqClient,
+                                          jT, uris,
+                                          BqDataFileLoader(
+                                              self.bqClient).loadSchemaFromString())
+            out[key] = rsrc
+
         dsetKey = _buildDataSetKey_(bqTable)
         if dsetKey not in out:
             out[dsetKey] = cacheDataSet(self.bqClient, bqTable,
@@ -313,7 +330,7 @@ class BqDataFileLoader(FileLoader):
                                     self.bqClient, self.defaultProject)
 
         with open(schemaFilePath) as schemaFile:
-            schema = self.loadSchemaFromString(schemaFile.read().strip())
+            schema = loadSchemaFromString(schemaFile.read().strip())
 
         ret = []
         ret.append(BqDataLoadTableResource(filePath, bqTable, schema,
@@ -323,49 +340,50 @@ class BqDataFileLoader(FileLoader):
                                 self.datasets))
         return ret
 
-    def loadSchemaFromString(self, schema: str):
-        """ only support simple schema for i.e. not json just cmd line
-        like format """
+def loadSchemaFromString(schema: str):
+    """ only support simple schema for i.e. not json just cmd line
+    like format """
 
-        # first we try to load as json
-        try:
-            fields = [BqDataFileLoader.loadSchemaField(jsonField)
-                      for jsonField in json.loads(schema)]
-            return fields
-        except JSONDecodeError:
-            pass
+    # first we try to load as json
+    try:
+        fields = [BqDataFileLoader.loadSchemaField(jsonField)
+                  for jsonField in json.loads(schema)]
+        return fields
+    except JSONDecodeError:
+        pass
 
-        try:
-            ret = []
-            for s in schema.split(","):
-                (col, type) = s.split(":", maxsplit=2)
-                ret.append(SchemaField(col, type))
-            return ret
-        except ValueError:
-            raise Exception("Schema file should contain either bq "
-                            "json schema definition or a string "
-                            "following the"
-                            "format "
-                            "col:type," +
-                            "col2:type.")
+    try:
+        ret = []
+        for s in schema.split(","):
+            (col, type) = s.split(":", maxsplit=2)
+            ret.append(SchemaField(col, type))
+        return ret
+    except ValueError:
+        raise Exception("Schema file should contain either bq "
+                        "json schema definition or a string "
+                        "following the"
+                        "format "
+                        "col:type," +
+                        "col2:type.")
 
-    def loadSchemaField(jsonField: dict):
-        lMapping = {k.lower(): k for k in jsonField}
-        mode = 'NULLABLE'
-        if "mode" in lMapping:
-            mode = jsonField[lMapping['mode']]
+def loadSchemaField(jsonField: dict):
+    print(jsonField)
+    lMapping = {k.lower(): k for k in jsonField}
+    mode = 'NULLABLE'
+    if "mode" in lMapping:
+        mode = jsonField[lMapping['mode']]
 
-        description = None
-        if "description" in lMapping:
-            description = jsonField[lMapping['description']]
+    description = None
+    if "description" in lMapping:
+        description = jsonField[lMapping['description']]
 
-        fields = ()
-        if "fields" in lMapping:
-            fields = [BqDataFileLoader.loadSchemaField(x)
-                      for x in jsonField[lMapping['fields']]]
+    fields = ()
+    if "fields" in lMapping:
+        fields = [BqDataFileLoader.loadSchemaField(x)
+                  for x in jsonField[lMapping['fields']]]
 
-        return SchemaField(jsonField[lMapping["name"]],
-                           jsonField[lMapping["type"]],
-                           mode=mode,
-                           description=description,
-                           fields=fields)
+    return SchemaField(jsonField[lMapping["name"]],
+                       jsonField[lMapping["type"]],
+                       mode=mode,
+                       description=description,
+                       fields=fields)

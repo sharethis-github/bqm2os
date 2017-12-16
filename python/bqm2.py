@@ -269,7 +269,10 @@ if __name__ == "__main__":
                                              kwargs),
             localdata=BqDataFileLoader(loadClient,
                                        kwargs['dataset'],
-                                       kwargs['project'])))
+                                       kwargs['project'])),
+            gcsdata=BqQueryTemplatingFileLoader(client, gcsClient,
+                                                bqJobs,
+                                                TableType.TABLE_GCS_LOAD, kwargs))
 
     (resources, dependencies) = builder.buildDepend(args)
     executor = DependencyExecutor(resources, dependencies,
