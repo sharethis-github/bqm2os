@@ -296,6 +296,10 @@ class BqTableBasedResource(Resource):
     def isRunning(self):
         raise Exception("implement this function")
 
+    def __str__(self):
+        return ".".join([self.table.dataset_name,
+                         self.table.name, "${query}"])
+
 class BqGcsTableLoadResource(BqTableBasedResource):
     # LoadTableFromStorageJob
     def __init__(self, table: Table,
@@ -306,19 +310,25 @@ class BqGcsTableLoadResource(BqTableBasedResource):
         super(BqGcsTableLoadResource, self)\
             .__init__(table, defTime, bqClient)
         self.job = job
+        self.uris = uris
+        self.schema = schema
 
     def isRunning(self):
-        isJobRunning(self.job)
+        return isJobRunning(self.job)
 
     def create(self):
         jobid = "-".join(["create", self.table.dataset_name,
                           self.table.name, str(uuid.uuid4())])
         self.job = LoadTableFromStorageJob(jobid, self.table,
-                                           self.source_uris,
-                                           self.client,
+                                           self.uris,
+                                           self.bqClient,
                                            self.schema)
+        self.job.source_format = DestinationFormat.NEWLINE_DELIMITED_JSON
+        self.job.ignore_unknown_values = True
         self.job.begin()
 
+    def dependsOn(self, other: Resource):
+        return False
 
 
 class BqQueryBasedResource(BqTableBasedResource):
@@ -394,10 +404,6 @@ class BqViewBackedTableResource(BqQueryBasedResource):
     def isRunning(self):
         return False
 
-    def __str__(self):
-        return "bqview:" + ".".join([self.table.dataset_name,
-                                     self.table.name, "${query}"])
-
     def dump(self):
         return self.query
 
@@ -444,10 +450,6 @@ class BqQueryBackedTableResource(BqQueryBasedResource):
         else:
             return False
 
-    def __str__(self):
-        return "bqtable:" + ".".join([self.table.dataset_name,
-                                     self.table.name, "${query}"])
-
     def dump(self):
         return self.query
 
@@ -485,10 +487,6 @@ class BqQueryBackedTableResource(BqQueryBasedResource):
             return self.queryJob.state in ['RUNNING', 'PENDING']
         else:
             return False
-
-    def __str__(self):
-        return "bqtable:" + ".".join([self.table.dataset_name,
-                                     self.table.name, "${query}"])
 
     def dump(self):
         return self.query

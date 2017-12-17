@@ -260,11 +260,9 @@ class BqQueryTemplatingFileLoader(FileLoader):
             with open(filePath + ".schema") as schemaFile:
                 schema = loadSchemaFromString(schemaFile.read().strip())
 
-            rsrc = BqGcsTableLoadResource(table, int(mtime*1000),
+            rsrc = BqGcsTableLoadResource(bqTable, int(mtime*1000),
                                           self.bqClient,
-                                          jT, uris,
-                                          BqDataFileLoader(
-                                              self.bqClient).loadSchemaFromString())
+                                          jT, uris, schema)
             out[key] = rsrc
 
         dsetKey = _buildDataSetKey_(bqTable)
@@ -346,7 +344,7 @@ def loadSchemaFromString(schema: str):
 
     # first we try to load as json
     try:
-        fields = [BqDataFileLoader.loadSchemaField(jsonField)
+        fields = [loadSchemaField(jsonField)
                   for jsonField in json.loads(schema)]
         return fields
     except JSONDecodeError:
@@ -367,7 +365,6 @@ def loadSchemaFromString(schema: str):
                         "col2:type.")
 
 def loadSchemaField(jsonField: dict):
-    print(jsonField)
     lMapping = {k.lower(): k for k in jsonField}
     mode = 'NULLABLE'
     if "mode" in lMapping:
@@ -379,7 +376,7 @@ def loadSchemaField(jsonField: dict):
 
     fields = ()
     if "fields" in lMapping:
-        fields = [BqDataFileLoader.loadSchemaField(x)
+        fields = [loadSchemaField(x)
                   for x in jsonField[lMapping['fields']]]
 
     return SchemaField(jsonField[lMapping["name"]],
