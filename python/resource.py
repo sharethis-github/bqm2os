@@ -10,7 +10,7 @@ from google.cloud.bigquery.dataset import Dataset
 from google.cloud.bigquery.job import WriteDisposition, CopyJob, \
     QueryPriority, QueryJob, SourceFormat, \
     ExtractTableToStorageJob, Compression, \
-    DestinationFormat
+    DestinationFormat, LoadTableFromStorageJob
 import time
 from google.cloud.bigquery.table import Table
 import logging
@@ -63,8 +63,6 @@ class BqJobs:
             for t in iter:
                 if t.destination:
                     tableKey = _buildDataSetTableKey_(t.destination)
-                    print(tableKey + " was found in " + state)
-                    print(str(t.destination.project))
                     if tableKey in self.tableToJobMap:
                         continue
                     self.tableToJobMap[tableKey] = t
@@ -260,7 +258,86 @@ def makeJobName(parts: list):
     return "-".join(parts + [str(uuid.uuid4())])
 
 
-class BqQueryBasedResource(Resource):
+# base resource class for all table back resources
+class BqTableBasedResource(Resource):
+    """ Base class of query based big query actions """
+    def __init__(self, table: Table,
+                 defTime: int, bqClient: Client):
+        self.table = table
+        self.bqClient = bqClient
+        self.defTime = defTime
+
+    def exists(self):
+        return self.table.exists()
+
+    def updateTime(self):
+        """ time in milliseconds.  None if not created """
+        self.table.reload()
+        createdTime = self.table.modified
+
+        if createdTime:
+            return int(createdTime.strftime("%s")) * 1000
+        return None
+
+    def definitionTime(self):
+        """ Time in milliseconds """
+        return self.defTime
+
+    def create(self):
+        raise Exception("implement")
+
+    def key(self):
+        return ".".join([self.table.dataset_name,
+                         self.table.name])
+
+    def dependsOn(self, other: Resource):
+        raise Exception("implement this function")
+
+    def isRunning(self):
+        raise Exception("implement this function")
+
+    def __str__(self):
+        return ".".join([self.table.dataset_name,
+                         self.table.name, "${query}"])
+
+
+class BqGcsTableLoadResource(BqTableBasedResource):
+    # LoadTableFromStorageJob
+    def __init__(self, table: Table,
+                 defTime: int, bqClient: Client,
+                 job: LoadTableFromStorageJob,
+                 uris: tuple,
+                 schema: tuple):
+        super(BqGcsTableLoadResource, self)\
+            .__init__(table, defTime, bqClient)
+        self.job = job
+        self.uris = uris
+        self.schema = schema
+
+    def isRunning(self):
+        return isJobRunning(self.job)
+
+    def create(self):
+        jobid = "-".join(["create", self.table.dataset_name,
+                          self.table.name, str(uuid.uuid4())])
+        self.job = LoadTableFromStorageJob(jobid, self.table,
+                                           self.uris,
+                                           self.bqClient,
+                                           self.schema)
+        self.job.source_format = DestinationFormat.NEWLINE_DELIMITED_JSON
+        self.job.ignore_unknown_values = True
+        self.job.write_disposition = WriteDisposition.WRITE_TRUNCATE
+        self.job.begin()
+
+    def dependsOn(self, other: Resource):
+        return ",".join(self.uris) in set([other.key()])
+
+    def key(self):
+        return ".".join(["load", self.table.dataset_name,
+                         self.table.name])
+
+
+class BqQueryBasedResource(BqTableBasedResource):
     """ Base class of query based big query actions """
     def __init__(self, query: str, table: Table,
                  defTime: int, bqClient: Client):
@@ -268,9 +345,6 @@ class BqQueryBasedResource(Resource):
         self.table = table
         self.bqClient = bqClient
         self.defTime = defTime
-
-    def exists(self):
-        return self.table.exists()
 
     def updateTime(self):
         """ time in milliseconds.  None if not created """
@@ -335,10 +409,6 @@ class BqViewBackedTableResource(BqQueryBasedResource):
     def isRunning(self):
         return False
 
-    def __str__(self):
-        return "bqview:" + ".".join([self.table.dataset_name,
-                                     self.table.name, "${query}"])
-
     def dump(self):
         return self.query
 
@@ -348,6 +418,45 @@ def strictSubstring(contained, container):
     :rtype: bool
     """
     return contained in container and len(contained) < len(container)
+
+
+class BqQueryBackedTableResource(BqQueryBasedResource):
+    def __init__(self, query: str, table: Table,
+                 defTime: int, bqClient: Client, queryJob: QueryJob):
+        super(BqQueryBackedTableResource, self)\
+            .__init__(query, table, defTime, bqClient)
+        self.queryJob = queryJob
+
+    def create(self):
+        if self.table.exists():
+            self.table.delete()
+
+        jobid = "-".join(["create", self.table.dataset_name,
+                          self.table.name, str(uuid.uuid4())])
+        query_job = self.bqClient.run_async_query(jobid, self.query)
+        query_job.allow_large_results = True
+        query_job.flatten_results = False
+        query_job.destination = self.table
+        query_job.priority = QueryPriority.INTERACTIVE
+        query_job.write_disposition = WriteDisposition.WRITE_TRUNCATE
+        query_job.maximum_billing_tier = 2
+        query_job.begin()
+        self.queryJob = query_job
+
+    # def key(self):
+    #     return ".".join([self.table.dataset_name, self.table.name])
+
+    def isRunning(self):
+        if self.queryJob:
+            self.queryJob.reload()
+            print(self.queryJob.name,
+                  self.queryJob.state, self.queryJob.errors)
+            return self.queryJob.state in ['RUNNING', 'PENDING']
+        else:
+            return False
+
+    def dump(self):
+        return self.query
 
 
 class BqQueryBackedTableResource(BqQueryBasedResource):
@@ -385,12 +494,40 @@ class BqQueryBackedTableResource(BqQueryBasedResource):
         else:
             return False
 
-    def __str__(self):
-        return "bqtable:" + ".".join([self.table.dataset_name,
-                                     self.table.name, "${query}"])
-
     def dump(self):
         return self.query
+
+
+class GcsResource(Resource):
+    def __init__(self, gcsClient, uris: str):
+        self.gcsClient = gcsClient
+        self.uris = uris
+
+    def create(self):
+        pass
+
+    def exists(self):
+        results = set([gcsExists(self.gcsClient, uri) for uri in
+                       self.uris])
+
+        return True in results and len(results) == 1
+
+    def key(self):
+        return ",".join(self.uris)
+
+    def dependsOn(self, resource):
+        return False
+
+    def isRunning(self):
+        return False
+
+    def definitionTime(self):
+        # Todo - should we compute this?
+        return 0
+
+    def updateTime(self):
+        # Todo - should we compute this?
+        return 0
 
 
 class BqExtractTableResource(Resource):
@@ -443,10 +580,7 @@ class BqExtractTableResource(Resource):
                                      self.table.name])
 
     def exists(self):
-        bucket = self.gcsClient.get_bucket(self.bucket)
-        objs = [x for x in bucket.list_blobs(1, prefix=self.pathPrefix,
-                                             delimiter="/")]
-        return len(objs) > 0
+        return gcsExists(self.gcsClient, self.uris)
 
     def dependsOn(self, other: Resource):
         return "extract." + other.key() == self.key()
@@ -499,3 +633,27 @@ def export_data_to_gcs(dataset_name, table_name, destination):
 
     print('Exported {}:{} to {}'.format(
         dataset_name, table_name, destination))
+
+
+def isJobRunning(job):
+    if job:
+        job.reload()
+        print(job.name,
+              job.state, job.errors)
+        return job.state in ['RUNNING', 'PENDING']
+    else:
+        return False
+
+
+def parseBucketAndPrefix(uris):
+    bucket = uris.replace("gs://", "").split("/")[0]
+    prefix = "/".join(uris.replace("gs://", "").split("/")[:-2])
+    return (bucket, prefix)
+
+
+def gcsExists(gcsClient, uris):
+    (bucket, prefix) = parseBucketAndPrefix(uris)
+    bucket = gcsClient.get_bucket(bucket)
+    objs = [x for x in bucket.list_blobs(1, prefix=prefix,
+                                         delimiter="/")]
+    return len(objs) > 0
