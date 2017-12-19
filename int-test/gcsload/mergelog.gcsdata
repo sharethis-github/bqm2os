@@ -1,2 +1,0 @@
-gs://sharethis-thirdparty-mergelog/v1/viglinkdata/{yyyymmdd}{hh}/*.gz
-gs://sharethis-datapipe/mergelog-mini/{yyyymmdd}{hh}/*.gz

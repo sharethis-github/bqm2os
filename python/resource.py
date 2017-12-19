@@ -63,8 +63,6 @@ class BqJobs:
             for t in iter:
                 if t.destination:
                     tableKey = _buildDataSetTableKey_(t.destination)
-                    print(tableKey + " was found in " + state)
-                    print(str(t.destination.project))
                     if tableKey in self.tableToJobMap:
                         continue
                     self.tableToJobMap[tableKey] = t
@@ -325,10 +323,15 @@ class BqGcsTableLoadResource(BqTableBasedResource):
                                            self.schema)
         self.job.source_format = DestinationFormat.NEWLINE_DELIMITED_JSON
         self.job.ignore_unknown_values = True
+        self.job.write_disposition = WriteDisposition.WRITE_TRUNCATE
         self.job.begin()
 
     def dependsOn(self, other: Resource):
-        return False
+        return ",".join(self.uris) in set([other.key()])
+
+    def key(self):
+        return ".".join(["load", self.table.dataset_name,
+                         self.table.name])
 
 
 class BqQueryBasedResource(BqTableBasedResource):
@@ -491,6 +494,37 @@ class BqQueryBackedTableResource(BqQueryBasedResource):
     def dump(self):
         return self.query
 
+class GcsResource(Resource):
+    def __init__(self, gcsClient, uris: str):
+        self.gcsClient = gcsClient
+        self.uris = uris
+
+    def create(self):
+        pass
+
+    def exists(self):
+        results = set([gcsExists(self.gcsClient, uri) for uri in
+                       self.uris])
+
+        return True in results and len(results) == 1
+
+    def key(self):
+        return ",".join(self.uris)
+
+    def dependsOn(self, resource):
+        return False
+
+    def isRunning(self):
+        return False
+
+    def definitionTime(self):
+        # Todo - should we compute this?
+        return 0
+
+    def updateTime(self):
+        # Todo - should we compute this?
+        return 0
+
 class BqExtractTableResource(Resource):
     def __init__(self,
                  table: Table,
@@ -541,10 +575,7 @@ class BqExtractTableResource(Resource):
                                      self.table.name])
 
     def exists(self):
-        bucket = self.gcsClient.get_bucket(self.bucket)
-        objs = [x for x in bucket.list_blobs(1, prefix=self.pathPrefix,
-                                             delimiter="/")]
-        return len(objs) > 0
+        return gcsExists(self.gcsClient, self.uris)
 
     def dependsOn(self, other: Resource):
         return "extract." + other.key() == self.key()
@@ -570,7 +601,6 @@ class BqExtractTableResource(Resource):
         bucket = uris.replace("gs://", "").split("/")[0]
         prefix = "/".join(uris.replace("gs://", "").split("/")[:-2])
         return (bucket, prefix)
-
 
 def wait_for_job(job: QueryJob):
     while True:
@@ -606,3 +636,16 @@ def isJobRunning(job):
         return job.state in ['RUNNING', 'PENDING']
     else:
         return False
+
+def parseBucketAndPrefix(uris):
+    bucket = uris.replace("gs://", "").split("/")[0]
+    prefix = "/".join(uris.replace("gs://", "").split("/")[:-2])
+    return (bucket, prefix)
+
+def gcsExists(gcsClient, uris):
+    (bucket, prefix) = parseBucketAndPrefix(uris)
+    bucket = gcsClient.get_bucket(bucket)
+    objs = [x for x in bucket.list_blobs(1, prefix=prefix,
+                                         delimiter="/")]
+    return len(objs) > 0
+

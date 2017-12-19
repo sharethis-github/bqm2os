@@ -75,7 +75,8 @@ class DependencyExecutor:
             for n in sorted(self.dependencies.keys()):
                 if not len(self.dependencies[n]):
                     todel.add(n)
-                    with open(folder + "/" + self.resources[n].key() +
+                    with open(folder + "/" + self.resources[n]
+                            .key().replace("/","_") +
                               ".debug", "w") as f:
                         f.write(self.resources[n].dump())
                         f.close()

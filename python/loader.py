@@ -13,7 +13,7 @@ import tmplhelper
 from resource import Resource, _buildDataSetKey_, BqDatasetBackedResource, \
     BqJobs, BqQueryBackedTableResource, _buildDataSetTableKey_, \
     BqViewBackedTableResource, BqDataLoadTableResource, \
-    BqExtractTableResource, BqGcsTableLoadResource
+    BqExtractTableResource, BqGcsTableLoadResource, GcsResource
 from tmplhelper import evalTmplRecurse, explodeTemplate
 
 
@@ -235,6 +235,7 @@ class BqQueryTemplatingFileLoader(FileLoader):
                                                queryJob=jT)
             out[key] = arsrc
             # check if there is extraction logic
+            # todo: we need to populate the extraction job
             if 'extract' in templateVars:
                 extractRsrc = BqExtractTableResource(bqTable,
                                                      int(mtime*1000),
@@ -264,6 +265,8 @@ class BqQueryTemplatingFileLoader(FileLoader):
                                           self.bqClient,
                                           jT, uris, schema)
             out[key] = rsrc
+            gcsRsrc = GcsResource(self.gcsClient, uris)
+            out[gcsRsrc.key()] = gcsRsrc
 
         dsetKey = _buildDataSetKey_(bqTable)
         if dsetKey not in out:
