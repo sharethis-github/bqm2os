@@ -7,7 +7,7 @@ atest2.test_local_json_data depends on atest2
 atest2.test_local_tabbed_data depends on atest2
 atest2.three depends on atest2
 atest2.two depends on atest2
-atest2.url_expanded_kw depends on atest2
+atest2.url_expanded_kw depends on atest2 atest2.mergelog_mini_sample
 extract.atest2.three depends on atest2.three
 gs://sharethis-int-tmp/load_three.json.gz depends on nothing
 load.atest2.load_three depends on gs://sharethis-int-tmp/load_three.json.gz
