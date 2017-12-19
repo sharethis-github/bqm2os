@@ -184,6 +184,7 @@ class BqDatasetBackedResource(Resource):
     def __str__(self):
         return ":".join([self.dataset.project, self.dataset.name])
 
+
 class BqDataLoadTableResource(Resource):
     """ todo: currently we block during the creation of this
     table but we should probably treat this just like any table
@@ -256,6 +257,7 @@ class BqDataLoadTableResource(Resource):
 def makeJobName(parts: list):
     return "-".join(parts + [str(uuid.uuid4())])
 
+
 # base resource class for all table back resources
 class BqTableBasedResource(Resource):
     """ Base class of query based big query actions """
@@ -297,6 +299,7 @@ class BqTableBasedResource(Resource):
     def __str__(self):
         return ".".join([self.table.dataset_name,
                          self.table.name, "${query}"])
+
 
 class BqGcsTableLoadResource(BqTableBasedResource):
     # LoadTableFromStorageJob
@@ -342,7 +345,6 @@ class BqQueryBasedResource(BqTableBasedResource):
         self.table = table
         self.bqClient = bqClient
         self.defTime = defTime
-
 
     def updateTime(self):
         """ time in milliseconds.  None if not created """
@@ -456,6 +458,7 @@ class BqQueryBackedTableResource(BqQueryBasedResource):
     def dump(self):
         return self.query
 
+
 class BqQueryBackedTableResource(BqQueryBasedResource):
     def __init__(self, query: str, table: Table,
                  defTime: int, bqClient: Client, queryJob: QueryJob):
@@ -494,6 +497,7 @@ class BqQueryBackedTableResource(BqQueryBasedResource):
     def dump(self):
         return self.query
 
+
 class GcsResource(Resource):
     def __init__(self, gcsClient, uris: str):
         self.gcsClient = gcsClient
@@ -524,6 +528,7 @@ class GcsResource(Resource):
     def updateTime(self):
         # Todo - should we compute this?
         return 0
+
 
 class BqExtractTableResource(Resource):
     def __init__(self,
@@ -602,6 +607,7 @@ class BqExtractTableResource(Resource):
         prefix = "/".join(uris.replace("gs://", "").split("/")[:-2])
         return (bucket, prefix)
 
+
 def wait_for_job(job: QueryJob):
     while True:
         job.reload()  # Refreshes the state via a GET request.
@@ -628,6 +634,7 @@ def export_data_to_gcs(dataset_name, table_name, destination):
     print('Exported {}:{} to {}'.format(
         dataset_name, table_name, destination))
 
+
 def isJobRunning(job):
     if job:
         job.reload()
@@ -637,10 +644,12 @@ def isJobRunning(job):
     else:
         return False
 
+
 def parseBucketAndPrefix(uris):
     bucket = uris.replace("gs://", "").split("/")[0]
     prefix = "/".join(uris.replace("gs://", "").split("/")[:-2])
     return (bucket, prefix)
+
 
 def gcsExists(gcsClient, uris):
     (bucket, prefix) = parseBucketAndPrefix(uris)
@@ -648,4 +657,3 @@ def gcsExists(gcsClient, uris):
     objs = [x for x in bucket.list_blobs(1, prefix=prefix,
                                          delimiter="/")]
     return len(objs) > 0
-

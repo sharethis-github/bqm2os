@@ -75,9 +75,10 @@ class DependencyExecutor:
             for n in sorted(self.dependencies.keys()):
                 if not len(self.dependencies[n]):
                     todel.add(n)
-                    with open(folder + "/" + self.resources[n]
-                            .key().replace("/","_") +
-                              ".debug", "w") as f:
+                    toWrite = folder + "/" \
+                        + self.resources[n].key().replace("/", "_") \
+                        + ".debug"
+                    with open(toWrite, "w") as f:
                         f.write(self.resources[n].dump())
                         f.close()
                     del self.dependencies[n]
@@ -273,7 +274,8 @@ if __name__ == "__main__":
                                        kwargs['project']),
             gcsdata=BqQueryTemplatingFileLoader(client, gcsClient,
                                                 bqJobs,
-                                                TableType.TABLE_GCS_LOAD, kwargs)))
+                                                TableType.TABLE_GCS_LOAD,
+                                                kwargs)))
 
     (resources, dependencies) = builder.buildDepend(args)
     executor = DependencyExecutor(resources, dependencies,

@@ -3,14 +3,13 @@ import unittest
 
 from google.cloud.bigquery.client import Client
 from google.cloud.bigquery.schema import SchemaField
-from google.cloud import storage
 
 import mock
 from mock.mock import MagicMock
 
 from loader import DelegatingFileSuffixLoader, FileLoader, \
     parseDatasetTable, \
-    parseDataset, BqDataFileLoader, BqQueryTemplatingFileLoader, TableType
+    parseDataset, BqDataFileLoader, BqQueryTemplatingFileLoader, TableType, loadSchemaFromString
 from resource import BqJobs, BqViewBackedTableResource, \
     BqQueryBackedTableResource, BqDataLoadTableResource
 
@@ -124,7 +123,7 @@ class Test(unittest.TestCase):
 
     def testParseSchemaString(self):
         expected = [SchemaField("a", "int"), SchemaField("b", "string")]
-        result = BqDataFileLoader("dummy").loadSchemaFromString("a:int,"
+        result = loadSchemaFromString("a:int,"
                                                            "b:string")
         self.assertEquals(expected, result)
 
@@ -132,7 +131,7 @@ class Test(unittest.TestCase):
         # note, we just use any valid json here
         # bq api will bomb out on invalid json
         expected = []
-        result = BqDataFileLoader("dummy").loadSchemaFromString("[]")
+        result = loadSchemaFromString("[]")
         self.assertEquals(expected, result)
 
     def testExplodeTemplateVarsArray(self):
@@ -245,7 +244,7 @@ class Test(unittest.TestCase):
 
     def testSimpleLoadSchemaField(self):
         simpleField = [self.BuildJsonField("a", "float")]
-        schema = BqDataFileLoader.loadSchemaFromString({}, json.dumps(simpleField))
+        schema = loadSchemaFromString(json.dumps(simpleField))
         self.assertTrue(len(schema) == 1)
         self.assertTrue(schema[0].name == "a")
 
@@ -257,7 +256,7 @@ class Test(unittest.TestCase):
                                           fields=recordFields,
                                           mode='repeated')]
         print (json.dumps(jsonFields))
-        schema = BqDataFileLoader.loadSchemaFromString({}, json.dumps(jsonFields))
+        schema = loadSchemaFromString(json.dumps(jsonFields))
 
 if __name__ == '__main__':
     unittest.main()

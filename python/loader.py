@@ -341,6 +341,7 @@ class BqDataFileLoader(FileLoader):
                                 self.datasets))
         return ret
 
+
 def loadSchemaFromString(schema: str):
     """ only support simple schema for i.e. not json just cmd line
     like format """
@@ -366,6 +367,7 @@ def loadSchemaFromString(schema: str):
                         "format "
                         "col:type," +
                         "col2:type.")
+
 
 def loadSchemaField(jsonField: dict):
     lMapping = {k.lower(): k for k in jsonField}
