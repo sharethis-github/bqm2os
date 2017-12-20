@@ -9,6 +9,7 @@ import re
 from time import sleep
 
 from collections import defaultdict
+
 from google.cloud import storage
 from google.cloud.bigquery.client import Client
 
@@ -16,7 +17,6 @@ from loader import DelegatingFileSuffixLoader, \
     BqQueryTemplatingFileLoader, BqDataFileLoader, \
     TableType
 from resource import BqJobs
-from google.cloud import bigquery
 
 
 class DependencyBuilder:
@@ -246,10 +246,12 @@ if __name__ == "__main__":
             for (k, v) in varJson.items():
                 kwargs[k] = v
 
-    client = Client()
+    client = None
     if options.defaultProject:
         kwargs["project"] = options.defaultProject
+        client = Client(options.defaultProject)
     else:
+        client = Client()
         kwargs["project"] = client.project
 
     loadClient = Client(project=kwargs["project"])
@@ -290,8 +292,7 @@ if __name__ == "__main__":
     elif options.dumpToFolder:
         executor.dump(options.dumpToFolder)
     elif options.showJobs:
-        for j in BqJobs(bigquery.Client()).jobs():
-            if j.state in set(['RUNNING', 'PENDING']):
-                print(j.name, j.state, j.errors)
+        for j in BqJobs(client).jobs(max_results=1000000):
+            print(json.dumps(j._properties))
     else:
         parser.print_help()

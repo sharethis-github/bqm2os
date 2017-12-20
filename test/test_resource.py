@@ -215,3 +215,9 @@ group each by id, description, url
             BqDataLoadTableResource.detectSourceFormat(
             "a"))
 
+
+    def testBooYa(self):
+        client = Client()
+        job=[j for j in client.list_jobs(max_results=1)][0]
+
+        print(job)

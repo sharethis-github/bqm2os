@@ -48,8 +48,8 @@ class BqJobs:
         self.page_limit = page_limit
         self.pageSize = pageSize
 
-    def jobs(self, state_filter=None):
-        return self.bqClient.list_jobs(state_filter=state_filter)
+    def jobs(self, state_filter=None, max_results=10000):
+        return self.bqClient.list_jobs(state_filter=state_filter, all_users=True, max_results=max_results)
 
     def __loadTableJobs__(self, state):
         logging.info("starting jobs load for ", state)
@@ -647,13 +647,14 @@ def isJobRunning(job):
 
 def parseBucketAndPrefix(uris):
     bucket = uris.replace("gs://", "").split("/")[0]
-    prefix = "/".join(uris.replace("gs://", "").split("/")[:-2])
+    prefix = uris.replace("gs://", "").split("/", 1)[1]
     return (bucket, prefix)
 
 
 def gcsExists(gcsClient, uris):
-    (bucket, prefix) = parseBucketAndPrefix(uris)
-    bucket = gcsClient.get_bucket(bucket)
+    (bucketStr, prefix) = parseBucketAndPrefix(uris)
+    bucket = gcsClient.get_bucket(bucketStr)
+    print("checking if ", bucketStr, " and ", prefix, "exist")
     objs = [x for x in bucket.list_blobs(1, prefix=prefix,
                                          delimiter="/")]
     return len(objs) > 0
