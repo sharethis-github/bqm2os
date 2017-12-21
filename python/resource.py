@@ -333,7 +333,7 @@ class BqGcsTableLoadResource(BqTableBasedResource):
         return ",".join(self.uris) in set([other.key()])
 
     def key(self):
-        return ".".join(["load", self.table.dataset_name,
+        return ".".join([self.table.dataset_name,
                          self.table.name])
 
 
