@@ -265,8 +265,8 @@ class BqQueryTemplatingFileLoader(FileLoader):
                                           self.bqClient,
                                           jT, uris, schema)
             out[key] = rsrc
-            gcsRsrc = GcsResource(self.gcsClient, uris)
-            out[gcsRsrc.key()] = gcsRsrc
+            # gcsRsrc = GcsResource(self.gcsClient, uris)
+            # out[gcsRsrc.key()] = gcsRsrc
 
         dsetKey = _buildDataSetKey_(bqTable)
         if dsetKey not in out:
