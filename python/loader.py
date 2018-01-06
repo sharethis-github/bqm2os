@@ -14,7 +14,7 @@ from resource import Resource, _buildDataSetKey_, BqDatasetBackedResource, \
     BqJobs, BqQueryBackedTableResource, _buildDataSetTableKey_, \
     BqViewBackedTableResource, BqDataLoadTableResource, \
     BqExtractTableResource, BqGcsTableLoadResource, GcsResource
-from tmplhelper import evalTmplRecurse, explodeTemplate
+from tmplhelper import evalTmplRecurse, explodeTemplate, keysOfTemplate
 
 
 class FileLoader:
@@ -273,26 +273,29 @@ class BqQueryTemplatingFileLoader(FileLoader):
             out[dsetKey] = cacheDataSet(self.bqClient, bqTable,
                                         self.datasets)
 
+    def loadTemplateVarsFromString(self, template, filePath):
+        requestedKeys = keysOfTemplate(template)
+        defaultVars = {k: v for k, v in self.defaultVars.items()
+                       if k in requestedKeys or k in
+                       set(["dataset", "project"])}
+
+        filename = filePath.split("/")[-1].split(".")[-2]
+        folder = filePath.split("/")[-2]
+        templateVars = \
+            BqQueryTemplatingFileLoader.explodeTemplateVarsArray(
+                self.loadTemplateVars(
+                    filePath + ".vars"), folder, filename,
+                defaultVars)
+        return templateVars
+
     def load(self, filePath):
         mtime = getmtime(filePath)
         ret = {}
         with open(filePath) as f:
             template = f.read()
-            try:
-                filename = filePath.split("/")[-1].split(".")[-2]
-                folder = filePath.split("/")[-2]
-                templateVars = \
-                    BqQueryTemplatingFileLoader.explodeTemplateVarsArray(
-                        self.loadTemplateVars(
-                            filePath + ".vars"), folder, filename,
-                        self.defaultVars)
-
-            except FileNotFoundError:
-                raise Exception("Please define template vars in a file "
-                                "called " + filePath + ".vars")
-
-            for v in templateVars:
+            for v in self.loadTemplateVarsFromString(template, filePath):
                 self.processTemplateVar(v, template, filePath, mtime, ret)
+
         return ret.values()
 
     def loadTemplateVars(self, filePath) -> list:
