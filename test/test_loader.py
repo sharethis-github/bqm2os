@@ -229,63 +229,6 @@ class Test(unittest.TestCase):
         except Exception:
             pass
 
-
-    @mock.patch('google.cloud.bigquery.Client')
-    @mock.patch('google.cloud.storage.Client')
-    @mock.patch('resource.BqJobs')
-    def testProcessTemplateVarDuplicateTable(self, bqClient, bqJobs,
-                                           gcsClient):
-
-        bqClient.dataset('adataset').table('atable').name = 'atable'
-        bqClient.dataset('adataset').table('atable').dataset_name = \
-            'adataset'
-        bqClient.dataset('adataset').table('atable').project = 'aproject'
-
-        loader = BqQueryTemplatingFileLoader(bqClient, gcsClient, bqJobs,
-                                             TableType.TABLE, 'default')
-        templateVar = {
-            'dataset': 'adataset',
-            'table': "atable",
-            "value": "v"
-        }
-
-        # place the table name we'll generate in output already.  should trigger
-        # explosion
-        output = {"adataset:atable": set()}
-
-        try:
-            loader.processTemplateVar(templateVar, "select * from foo_{value}",
-                                  "filepath", 0, output)
-            print(output)
-            self.fail("Should have thrown exception for duplicate table name")
-        except:
-            pass
-
-
-    @mock.patch('google.cloud.bigquery.Client')
-    @mock.patch('google.cloud.storage.Client')
-    @mock.patch('resource.BqJobs')
-    def testProcessTemplateVarUnrequestedTemplateVarsOk(self, bqClient, bqJobs,
-                                           gcsClient):
-
-        bqClient.dataset('adataset').table('atable').name = 'atable'
-        bqClient.dataset('adataset').table('atable').dataset_name = \
-            'adataset'
-        bqClient.dataset('adataset').table('atable').project = 'aproject'
-
-        loader = BqQueryTemplatingFileLoader(bqClient, gcsClient, bqJobs,
-                                             TableType.TABLE,
-                                             defaultVars={"apple": ["1", "2"],
-                                                          "dataset": "adataset",
-                                                          "project": "aproject"})
-
-
-        # because apple was not requested, we don't expand that many copies
-        copies = loader.loadTemplateVarsFromString("select * from {table}.{dataset}.foo",
-                              "folder/filepath.querytemplate.vars")
-
-        self.assertTrue(len(copies) == 1)
-
     def BuildJsonField(self, name: str, type: str, mode='NULLABLE',
                        description=None, fields=None):
 
