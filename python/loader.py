@@ -14,7 +14,7 @@ from resource import Resource, _buildDataSetKey_, BqDatasetBackedResource, \
     BqJobs, BqQueryBackedTableResource, _buildDataSetTableKey_, \
     BqViewBackedTableResource, BqDataLoadTableResource, \
     BqExtractTableResource, BqGcsTableLoadResource, GcsResource
-from tmplhelper import evalTmplRecurse, explodeTemplate, keysOfTemplate
+from tmplhelper import evalTmplRecurse, explodeTemplate, keysOfTemplate, explodeTemplateVarsArray
 
 
 class FileLoader:
@@ -164,29 +164,29 @@ class BqQueryTemplatingFileLoader(FileLoader):
         if not self.tableType or self.tableType not in TableType:
             raise Exception("TableType must be set")
 
-    def explodeTemplateVarsArray(rawTemplates: list,
-                                 folder: str,
-                                 filename: str,
-                                 defaultVars: dict):
-        ret = []
-        for t in rawTemplates:
-            copy = t.copy()
-            copy['folder'] = folder
-            copy['filename'] = filename
-            if 'dataset' not in copy:
-                copy['dataset'] = defaultVars['dataset']
-            if 'project' not in copy:
-                copy['project'] = defaultVars['project']
-            if 'table' not in copy:
-                copy['table'] = filename
-
-            for (k, v) in defaultVars.items():
-                if k not in copy:
-                    copy[k] = v
-
-            ret += [evalTmplRecurse(t) for t in explodeTemplate(copy)]
-
-        return ret
+    # def explodeTemplateVarsArray(rawTemplates: list,
+    #                              folder: str,
+    #                              filename: str,
+    #                              defaultVars: dict):
+    #     ret = []
+    #     for t in rawTemplates:
+    #         copy = t.copy()
+    #         copy['folder'] = folder
+    #         copy['filename'] = filename
+    #         if 'dataset' not in copy:
+    #             copy['dataset'] = defaultVars['dataset']
+    #         if 'project' not in copy:
+    #             copy['project'] = defaultVars['project']
+    #         if 'table' not in copy:
+    #             copy['table'] = filename
+    #
+    #         for (k, v) in defaultVars.items():
+    #             if k not in copy:
+    #                 copy[k] = v
+    #
+    #         ret += [evalTmplRecurse(t) for t in explodeTemplate(copy)]
+    #
+    #     return ret
 
     def processTemplateVar(self, templateVars: dict, template: str,
                            filePath: str, mtime: int, out: dict):
@@ -275,18 +275,21 @@ class BqQueryTemplatingFileLoader(FileLoader):
 
     def loadTemplateVarsFromString(self, template, filePath):
         requestedKeys = keysOfTemplate(template)
-        defaultVars = {k: v for k, v in self.defaultVars.items()
-                       if k in requestedKeys or k in
-                       set(["dataset", "project"])}
+        # make a copy
+        defaultVars = {k: v for k, v in self.defaultVars.items()}
 
+        # add folder / filename
         filename = filePath.split("/")[-1].split(".")[-2]
         folder = filePath.split("/")[-2]
-        templateVars = \
-            BqQueryTemplatingFileLoader.explodeTemplateVarsArray(
-                self.loadTemplateVars(
-                    filePath + ".vars"), folder, filename,
-                defaultVars)
-        return templateVars
+        defaultVars['folder'] = folder
+        defaultVars['filename'] = filename
+
+        unexplodedTemplateVars = self.loadTemplateVars(filePath + ".vars")
+        # todo - inside ArrayV2 we've got to drop unneeded vars for template evaluation
+        explodedTemplateVars = explodeTemplateVarsArray(requestedKeys,
+                                                        unexplodedTemplateVars,
+                                                        defaultVars)
+        return explodedTemplateVars
 
     def load(self, filePath):
         mtime = getmtime(filePath)

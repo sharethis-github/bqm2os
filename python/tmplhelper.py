@@ -41,7 +41,10 @@ def evalTmplRecurse(templateKeys: dict):
     return templateKeysCopy
 
 
-def keysOfTemplate(str):
+def keysOfTemplate(x):
+    if isinstance(x, list):
+        ret = set([])
+        [ret.add(y) for y in [z for z in x]]
     return set([x[1] for x in string.Formatter().parse(str) if x[1]])
 
 
@@ -132,3 +135,49 @@ def makeCombinations(lists: list, out: list, collect: list):
         outCopy = out.copy()
         outCopy.append(m)
         makeCombinations(listsCopy, outCopy, collect)
+
+
+def computeImpliedRequiredVars(requiredVars: set, templateVars: dict):
+    """
+
+    :param requiredVars: A template declares it needs vars x, y, z
+     but to actually compute those , we may may need vars t, u, v which are found
+     in templateVars, but ....
+     we don't want to do cross product expansion of a var in templateVars if it's not
+     actually required in the template to begin with.
+
+    :param templateVars:
+    :return:
+    """
+    requiredVars = requiredVars.copy()
+    toReturn = requiredVars.copy()
+
+    # todo: handle key requesting key i.e. "val": "{val}"
+    while len(requiredVars):
+        next = requiredVars.pop()
+        toReturn.add(next)
+        # todo: what if requiredVars is not contained in templateVars.keys()?
+        requested = keysOfTemplate(templateVars[next])
+        for r in requested:
+            if r not in toReturn:
+                toReturn.add(r)
+                requiredVars.add(r)
+
+    return toReturn
+
+def explodeTemplateVarsArray(requiredVars: set,
+                              rawTemplates: list,
+                              defaultVars: dict):
+    ret = []
+    for t in rawTemplates:
+        copy = t.copy()
+        for (k, v) in defaultVars.items():
+            if k not in copy:
+                copy[k] = v
+
+        # remove any unneeded keys
+        impliedRequired = computeImpliedRequiredVars(requiredVars, copy)
+        copy = { k: v for k, v in copy.items() if k in impliedRequired}
+        ret += [evalTmplRecurse(t) for t in explodeTemplate(copy)]
+
+    return ret

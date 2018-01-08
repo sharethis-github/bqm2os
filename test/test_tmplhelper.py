@@ -4,7 +4,8 @@ from datetime import datetime, timedelta
 
 from frozendict import frozendict
 
-from tmplhelper import explodeTemplate, handleDayDateField, evalTmplRecurse
+from tmplhelper import explodeTemplate, handleDayDateField, evalTmplRecurse, keysOfTemplate, computeImpliedRequiredVars, \
+    explodeTemplateVarsArray
 
 
 class Test(unittest.TestCase):
@@ -165,6 +166,65 @@ class Test(unittest.TestCase):
             templateVars)
         result = set(frozendict(x) for x in result)
         self.assertEqual(expected, result)
+
+
+    def testKeysOfTemplateWithArray(self):
+        self.assertEquals(set(['a','b','c','d']),
+                          keysOfTemplate(["{a}_{b}", "{c}_{d}"]))
+
+    def testKeysOfTemplate(self):
+        self.assertEquals(set(['a','b']), keysOfTemplate("{a}_{b}"))
+
+    def testKeysOfTemplateEmpty(self):
+        self.assertEquals(set([]), keysOfTemplate("ab.foo"))
+
+    def testComputeImpliedRequiredKeysSimple(self):
+        requiredVars = set(['a'])
+        templateVars = { "a": "{b}", "b": "c"}
+
+        ret = computeImpliedRequiredVars(requiredVars, templateVars)
+        self.assertEquals(set(['a', 'b']), ret)
+
+    def testComputeImpliedRequiredKeysTwoLevels(self):
+        requiredVars = set(['a'])
+        templateVars = { "a": "{b}", "b": "{c}", "c": "d"}
+
+        ret = computeImpliedRequiredVars(requiredVars, templateVars)
+        self.assertEquals(set(['a', 'b', 'c']), ret)
+
+    def testExplodeTemplateVarsArray(self):
+        requiredVars = set(['a'])
+        rawTemplates = [{'a': '{b}', 'c': 'd'}]
+        defaultVars = {"b": "x"}
+        result = explodeTemplateVarsArray(requiredVars, rawTemplates, defaultVars)
+
+        expected = [{'a': 'x', 'b': 'x'}]
+        self.assertEquals(expected, result)
+
+
+    def testExplodeTemplateVarsArray(self):
+        from datetime import datetime, timedelta
+
+        n = datetime.today()
+        expectedDt = [dt.strftime("%Y%m%d") for dt in [n, n + timedelta(
+                days=-1)]]
+        requestedKeys = set(['folder', 'foo', 'yyyymmdd'])
+        template = {"folder": "afolder",
+                    "foo": "bar_{folder}_{filename}",
+                    "yyyymmdd": [-1, 0]}
+        result = explodeTemplateVarsArray(requestedKeys, [template],
+                                          {"dataset": "adataset",
+                                           "project": "aproject",
+                                           "filename": "afile"})
+        expected = [{'filename': 'afile', 'folder': 'afolder', 'dataset':
+                    'adataset', 'yyyymmdd': expectedDt[1], 'foo':
+                    'bar_afolder_afile', "table": "afile",
+                     "project": "aproject"},
+                    {'filename': 'afile', 'folder': 'afolder', 'dataset':
+                    'adataset', 'yyyymmdd': expectedDt[0], 'foo':
+                        'bar_afolder_afile', "table": "afile",
+                     "project": "aproject"}]
+        self.assertEqual(result, expected)
 
 
 if __name__ == '__main__':

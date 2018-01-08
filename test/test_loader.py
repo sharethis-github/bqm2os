@@ -9,9 +9,10 @@ from mock.mock import MagicMock
 
 from loader import DelegatingFileSuffixLoader, FileLoader, \
     parseDatasetTable, \
-    parseDataset, BqDataFileLoader, BqQueryTemplatingFileLoader, TableType, loadSchemaFromString
+    parseDataset, BqQueryTemplatingFileLoader, TableType, loadSchemaFromString
 from resource import BqJobs, BqViewBackedTableResource, \
-    BqQueryBackedTableResource, BqDataLoadTableResource
+    BqQueryBackedTableResource
+from tmplhelper import explodeTemplateVarsArray
 
 
 class Test(unittest.TestCase):
@@ -133,30 +134,6 @@ class Test(unittest.TestCase):
         expected = []
         result = loadSchemaFromString("[]")
         self.assertEquals(expected, result)
-
-    def testExplodeTemplateVarsArray(self):
-        from datetime import datetime, timedelta
-
-        n = datetime.today()
-        expectedDt = [dt.strftime("%Y%m%d") for dt in [n, n + timedelta(
-                days=-1)]]
-        template = {"folder": "afolder",
-                    "foo": "bar_{folder}_{filename}",
-                    "yyyymmdd": [-1, 0]}
-        result = BqQueryTemplatingFileLoader\
-                .explodeTemplateVarsArray([template],
-                'afolder', 'afile', {"dataset": "adataset",
-                                     "project": "aproject"})
-        expected = [{'filename': 'afile', 'folder': 'afolder', 'dataset':
-                    'adataset', 'yyyymmdd': expectedDt[1], 'foo':
-                    'bar_afolder_afile', "table": "afile",
-                     "project": "aproject"},
-                    {'filename': 'afile', 'folder': 'afolder', 'dataset':
-                    'adataset', 'yyyymmdd': expectedDt[0], 'foo':
-                        'bar_afolder_afile', "table": "afile",
-                     "project": "aproject"}]
-        self.assertEqual(result, expected)
-
 
     @mock.patch('google.cloud.bigquery.Client')
     @mock.patch('google.cloud.storage.Client')
