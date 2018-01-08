@@ -221,14 +221,16 @@ class Test(unittest.TestCase):
         n = datetime.today()
         expectedDt = [dt.strftime("%Y%m%d") for dt in [n, n + timedelta(
                 days=-1)]]
-        requestedKeys = set(['folder', 'foo', 'yyyymmdd'])
+        requestedKeys = set(['folder', 'foo', 'yyyymmdd', 'project',
+                             'filename', 'table', 'dataset'])
         template = {"folder": "afolder",
                     "foo": "bar_{folder}_{filename}",
                     "yyyymmdd": [-1, 0]}
         result = explodeTemplateVarsArray(requestedKeys, [template],
                                           {"dataset": "adataset",
                                            "project": "aproject",
-                                           "filename": "afile"})
+                                           "filename": "afile",
+                                           "table": "afile"})
         expected = [{'filename': 'afile', 'folder': 'afolder', 'dataset':
                     'adataset', 'yyyymmdd': expectedDt[1], 'foo':
                     'bar_afolder_afile', "table": "afile",
@@ -237,6 +239,8 @@ class Test(unittest.TestCase):
                     'adataset', 'yyyymmdd': expectedDt[0], 'foo':
                         'bar_afolder_afile', "table": "afile",
                      "project": "aproject"}]
+        print("expected", expected)
+        print("actual", result)
         self.assertEqual(result, expected)
 
 

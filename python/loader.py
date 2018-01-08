@@ -164,30 +164,6 @@ class BqQueryTemplatingFileLoader(FileLoader):
         if not self.tableType or self.tableType not in TableType:
             raise Exception("TableType must be set")
 
-    # def explodeTemplateVarsArray(rawTemplates: list,
-    #                              folder: str,
-    #                              filename: str,
-    #                              defaultVars: dict):
-    #     ret = []
-    #     for t in rawTemplates:
-    #         copy = t.copy()
-    #         copy['folder'] = folder
-    #         copy['filename'] = filename
-    #         if 'dataset' not in copy:
-    #             copy['dataset'] = defaultVars['dataset']
-    #         if 'project' not in copy:
-    #             copy['project'] = defaultVars['project']
-    #         if 'table' not in copy:
-    #             copy['table'] = filename
-    #
-    #         for (k, v) in defaultVars.items():
-    #             if k not in copy:
-    #                 copy[k] = v
-    #
-    #         ret += [evalTmplRecurse(t) for t in explodeTemplate(copy)]
-    #
-    #     return ret
-
     def processTemplateVar(self, templateVars: dict, template: str,
                            filePath: str, mtime: int, out: dict):
         """
@@ -284,6 +260,10 @@ class BqQueryTemplatingFileLoader(FileLoader):
         defaultVars['folder'] = folder
         defaultVars['filename'] = filename
         defaultVars['table'] = filename
+        requestedKeys.add('folder')
+        requestedKeys.add('filename')
+        requestedKeys.add('table')
+        requestedKeys.add('dataset')
 
         unexplodedTemplateVars = self.loadTemplateVars(filePath + ".vars")
         # todo - inside ArrayV2 we've got to drop unneeded vars for template evaluation
