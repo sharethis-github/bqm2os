@@ -167,6 +167,9 @@ class Test(unittest.TestCase):
         result = set(frozendict(x) for x in result)
         self.assertEqual(expected, result)
 
+    def testKeysOfTemplateWithArrayIgnoringInteger(self):
+        self.assertEquals(set(['a']),
+                          keysOfTemplate(["{a}", -1]))
 
     def testKeysOfTemplateWithArray(self):
         self.assertEquals(set(['a','b','c','d']),
@@ -192,7 +195,17 @@ class Test(unittest.TestCase):
         ret = computeImpliedRequiredVars(requiredVars, templateVars)
         self.assertEquals(set(['a', 'b', 'c']), ret)
 
-    def testExplodeTemplateVarsArray(self):
+    def testComputeImpliedRequiredKeysMissingVars(self):
+        requiredVars = set(['a', 'missing'])
+        templateVars = { "a": "{b}", "b": "{c}", "c": "d"}
+
+        try:
+            computeImpliedRequiredVars(requiredVars, templateVars)
+            self.fail("We should have thrown exception because of missing vars")
+        except:
+            pass
+
+    def testExplodeTemplateVarsArraySimple(self):
         requiredVars = set(['a'])
         rawTemplates = [{'a': '{b}', 'c': 'd'}]
         defaultVars = {"b": "x"}

@@ -283,6 +283,7 @@ class BqQueryTemplatingFileLoader(FileLoader):
         folder = filePath.split("/")[-2]
         defaultVars['folder'] = folder
         defaultVars['filename'] = filename
+        defaultVars['table'] = filename
 
         unexplodedTemplateVars = self.loadTemplateVars(filePath + ".vars")
         # todo - inside ArrayV2 we've got to drop unneeded vars for template evaluation

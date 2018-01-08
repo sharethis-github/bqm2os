@@ -41,11 +41,16 @@ def evalTmplRecurse(templateKeys: dict):
     return templateKeysCopy
 
 
-def keysOfTemplate(x):
-    if isinstance(x, list):
+def keysOfTemplate(template):
+    if isinstance(template, list):
         ret = set([])
-        [ret.add(y) for y in [z for z in x]]
-    return set([x[1] for x in string.Formatter().parse(str) if x[1]])
+        [ret.update(y) for y in [keysOfTemplate(z) for z in template]]
+        return ret
+    elif isinstance(template, str):
+        return set([x[1] for x in string.Formatter().parse(template)
+                    if x[1]])
+    else:
+        return set([])
 
 
 def handleDayDateField(dt: datetime, val) -> str:
@@ -149,6 +154,13 @@ def computeImpliedRequiredVars(requiredVars: set, templateVars: dict):
     :param templateVars:
     :return:
     """
+    overlap = requiredVars.intersection(set(templateVars.keys()))
+    if len(overlap) != len(requiredVars):
+        missing = requiredVars.difference(overlap)
+
+        raise Exception("The template variables " + " ".join(missing)
+                        + " must be defined in order to proceed")
+
     requiredVars = requiredVars.copy()
     toReturn = requiredVars.copy()
 
@@ -156,7 +168,6 @@ def computeImpliedRequiredVars(requiredVars: set, templateVars: dict):
     while len(requiredVars):
         next = requiredVars.pop()
         toReturn.add(next)
-        # todo: what if requiredVars is not contained in templateVars.keys()?
         requested = keysOfTemplate(templateVars[next])
         for r in requested:
             if r not in toReturn:
@@ -165,9 +176,10 @@ def computeImpliedRequiredVars(requiredVars: set, templateVars: dict):
 
     return toReturn
 
+
 def explodeTemplateVarsArray(requiredVars: set,
-                              rawTemplates: list,
-                              defaultVars: dict):
+                             rawTemplates: list,
+                             defaultVars: dict):
     ret = []
     for t in rawTemplates:
         copy = t.copy()
@@ -177,7 +189,7 @@ def explodeTemplateVarsArray(requiredVars: set,
 
         # remove any unneeded keys
         impliedRequired = computeImpliedRequiredVars(requiredVars, copy)
-        copy = { k: v for k, v in copy.items() if k in impliedRequired}
+        copy = {k: v for k, v in copy.items() if k in impliedRequired}
         ret += [evalTmplRecurse(t) for t in explodeTemplate(copy)]
 
     return ret
