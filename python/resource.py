@@ -4,6 +4,7 @@ import re
 
 from json.decoder import JSONDecodeError
 
+from google.api.core.exceptions import NotFound
 from google.cloud import storage
 from google.cloud.bigquery.client import Client
 from google.cloud.bigquery.dataset import Dataset
@@ -400,11 +401,17 @@ class BqQueryBasedResource(BqTableBasedResource):
 
 class BqViewBackedTableResource(BqQueryBasedResource):
     def create(self):
-        self.table.view_query = self.query
-        if (self.table.exists()):
-            self.table.delete()
-        self.table.schema = []
-        self.table.create()
+        try:
+            self.table.view_query = self.query
+            if (self.table.exists()):
+                self.table.delete()
+            self.table.schema = []
+            self.table.create()
+        except NotFound:
+            # fail loading - exists will fail
+            # and we'll retry and after
+            # a few times app will exit
+            pass
 
     def isRunning(self):
         return False
@@ -442,9 +449,6 @@ class BqQueryBackedTableResource(BqQueryBasedResource):
         query_job.maximum_billing_tier = 2
         query_job.begin()
         self.queryJob = query_job
-
-    # def key(self):
-    #     return ".".join([self.table.dataset_name, self.table.name])
 
     def isRunning(self):
         if self.queryJob:
