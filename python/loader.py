@@ -2,7 +2,7 @@ import json
 from json.decoder import JSONDecodeError
 
 from google.cloud.bigquery.client import Client
-from google.cloud.bigquery.job import LoadTableFromStorageJob
+from google.cloud.bigquery.job import LoadTableFromStorageJob, DestinationFormat, Compression
 from google.cloud.bigquery.schema import SchemaField
 from google.cloud.bigquery.table import Table
 from os.path import getmtime
@@ -237,13 +237,21 @@ class BqQueryTemplatingFileLoader(FileLoader):
             # check if there is extraction logic
             # todo: we need to populate the extraction job
             if 'extract' in templateVars:
+                destination_format = "destination_format" in templateVars and templateVars["destination_format"] or DestinationFormat.NEWLINE_DELIMITED_JSON
+                print_header = "print_header" in templateVars and True or False
+                field_delimiter = "field_delimiter" in templateVars and templateVars["field_delimiter"] or None
+
                 extractRsrc = BqExtractTableResource(bqTable,
                                                      int(mtime*1000),
                                                      self.bqClient,
                                                      self.gcsClient, None,
                                                      templateVars[
                                                          'extract']
-                                                     )
+                                                     ,
+                                                     compression=Compression.GZIP,
+                                                     destination_format=destination_format,
+                                                     print_header=print_header,
+                                                     field_delimiter=field_delimiter)
                 # need to check for duplicates here
                 # todo
                 out[extractRsrc.key()] = extractRsrc
