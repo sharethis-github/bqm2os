@@ -19,4 +19,5 @@ RUN pip install google-api-python-client coverage boto boto3 pycodestyle request
 RUN pip install --upgrade google-cloud-core==0.27.1
 RUN pip install --upgrade google-cloud-bigquery==0.27.0
 RUN pip install --upgrade google-cloud-storage==1.5.0
+RUN apt-get install graphviz -y
 ADD /python /python
