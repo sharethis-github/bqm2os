@@ -9,6 +9,8 @@ cd $(dirname $0)
 docker build -t $imagename:$current_commit .
 
 docker run -e GOOGLE_APPLICATION_CREDENTIALS=/gcloud-private-key \
+-v ~/src/dynamic-data-config/endpoints:/endpoints \
+-v ~/src/dynamic-data-config/bigquery:/bigquery \
 -v ~/src/config/templates/secrets/int/bqm2-json/bqm2-gcloud-private-key:/gcloud-private-key \
 -v ~/src/taxonomy-mapping/:/mnt/templates \
 -v ~/.vimrc:/root/.vimrc \

@@ -2,7 +2,6 @@ import json
 from json.decoder import JSONDecodeError
 
 from google.cloud.bigquery.client import Client
-from google.cloud.bigquery.job import LoadTableFromStorageJob
 from google.cloud.bigquery.schema import SchemaField
 from google.cloud.bigquery.table import Table
 from os.path import getmtime
@@ -13,7 +12,7 @@ import tmplhelper
 from resource import Resource, _buildDataSetKey_, BqDatasetBackedResource, \
     BqJobs, BqQueryBackedTableResource, _buildDataSetTableKey_, \
     BqViewBackedTableResource, BqDataLoadTableResource, \
-    BqExtractTableResource, BqGcsTableLoadResource, GcsResource
+    BqExtractTableResource, BqGcsTableLoadResource
 from tmplhelper import evalTmplRecurse, explodeTemplate
 
 
@@ -223,9 +222,8 @@ class BqQueryTemplatingFileLoader(FileLoader):
 
         bqTable = self.bqClient.dataset(dataset, project=project).table(table)
         key = _buildDataSetTableKey_(bqTable)
-        if key in out:
-            raise Exception("Templating generated duplicate "
-                            "tables outputs for " + filePath)
+
+        prev = key in out and out[key] or None
 
         if self.tableType == TableType.TABLE:
             jT = self.bqJobs.getJobForTable(bqTable)
@@ -272,6 +270,10 @@ class BqQueryTemplatingFileLoader(FileLoader):
         if dsetKey not in out:
             out[dsetKey] = cacheDataSet(self.bqClient, bqTable,
                                         self.datasets)
+
+        if prev and prev != out[key]:
+            raise Exception("Templating generated duplicate "
+                            "tables outputs for " + filePath)
 
     def load(self, filePath):
         mtime = getmtime(filePath)
