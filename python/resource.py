@@ -544,7 +544,9 @@ class BqExtractTableResource(Resource):
                  extractJob: ExtractTableToStorageJob,
                  uris: str,
                  compression=Compression.GZIP,
-                 destinationFormat=DestinationFormat.NEWLINE_DELIMITED_JSON):
+                 destination_format=DestinationFormat.NEWLINE_DELIMITED_JSON,
+                 field_delimiter=None,
+                 print_header=None):
 
         self.extractJob = extractJob
         self.defTime = defTime
@@ -552,10 +554,12 @@ class BqExtractTableResource(Resource):
         self.bqClient = bqClient
         self.gcsClient = gcsClient
         self.uris = uris
+        self.field_delimiter = field_delimiter
+        self.print_header = print_header
         # check uris
         (self.bucket, self.pathPrefix) = self.parseBucketAndPrefix(uris)
         self.compression = compression
-        self.destinationFormat = destinationFormat
+        self.destination_format = destination_format
 
     def create(self):
         jobid = "-".join(["extract", self.table.name,
@@ -563,8 +567,12 @@ class BqExtractTableResource(Resource):
         self.extractJob = self.bqClient.extract_table_to_storage(jobid,
                                                                  self.table,
                                                                  self.uris)
-        self.extractJob.destination_format = self.destinationFormat
+        self.extractJob.destination_format = self.destination_format
         self.extractJob.compression = self.compression
+        if self.print_header:
+            self.extractJob.print_header = self.print_header
+        if self.field_delimiter:
+            self.extractJob.field_delimiter = self.field_delimiter
         self.extractJob.begin()
 
     def key(self):
@@ -652,12 +660,13 @@ def isJobRunning(job):
 
 def parseBucketAndPrefix(uris):
     bucket = uris.replace("gs://", "").split("/")[0]
-    prefix = "/".join(uris.replace("gs://", "").split("/")[:-2])
+    prefix = "/".join(uris.replace("gs://", "").split("/")[1:])
     return (bucket, prefix)
 
 
 def gcsExists(gcsClient, uris):
     (bucket, prefix) = parseBucketAndPrefix(uris)
+    prefix = prefix.replace("*.gz", "")
     bucket = gcsClient.get_bucket(bucket)
     objs = [x for x in bucket.list_blobs(1, prefix=prefix,
                                          delimiter="/")]
