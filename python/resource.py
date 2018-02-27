@@ -8,7 +8,7 @@ from google.api.core.exceptions import NotFound
 from google.cloud import storage
 from google.cloud.bigquery.client import Client
 from google.cloud.bigquery.dataset import Dataset
-from google.cloud.bigquery.job import WriteDisposition, CopyJob, \
+from google.cloud.bigquery.job import WriteDisposition, \
     QueryPriority, QueryJob, SourceFormat, \
     ExtractTableToStorageJob, Compression, \
     DestinationFormat, LoadTableFromStorageJob
@@ -327,6 +327,7 @@ class BqGcsTableLoadResource(BqTableBasedResource):
                                            self.schema)
         self.job.source_format = DestinationFormat.NEWLINE_DELIMITED_JSON
         self.job.ignore_unknown_values = True
+        self.job.max_bad_records = 1000
         self.job.write_disposition = WriteDisposition.WRITE_TRUNCATE
         self.job.begin()
 
