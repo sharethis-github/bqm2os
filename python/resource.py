@@ -1,6 +1,7 @@
 import json
 import uuid
 import re
+from enum import Enum
 
 from json.decoder import JSONDecodeError
 
@@ -8,10 +9,10 @@ from google.api.core.exceptions import NotFound
 from google.cloud import storage
 from google.cloud.bigquery.client import Client
 from google.cloud.bigquery.dataset import Dataset
-from google.cloud.bigquery.job import WriteDisposition, CopyJob, \
+from google.cloud.bigquery.job import WriteDisposition, \
     QueryPriority, QueryJob, SourceFormat, \
     ExtractTableToStorageJob, Compression, \
-    DestinationFormat, LoadTableFromStorageJob
+    DestinationFormat, LoadTableFromStorageJob, _AsyncJob
 import time
 from google.cloud.bigquery.table import Table
 import logging
@@ -319,18 +320,67 @@ class BqTableBasedResource(Resource):
                          self.table.name, "${query}"])
 
 
+def processLoadTableOptions(options: dict, job: LoadTableFromStorageJob):
+    """
+    :param options: A dictionary of options matching fields available
+     on LoadTableFromStorageJob
+    :param job: An instance of LoadTableFromStorageJob
+    :return: None - simply decorates the job
+    """
+    formats = {
+        "AVRO": SourceFormat.AVRO,
+        "NEWLINE_DELIMITED_JSON": SourceFormat.NEWLINE_DELIMITED_JSON,
+        "CSV": SourceFormat.CSV,
+        "DATASTORE_BACKUP": SourceFormat.DATASTORE_BACKUP
+    }
+
+    if "source_format" in options:
+        value = options['source_format']
+        if value not in formats:
+            raise KeyError("Please use only one of the following: "
+                           + ",".join(formats.keys()))
+        job.source_format = formats[value]
+
+    if "max_bad_records" in options:
+        job.max_bad_records = int(options['max_bad_records'])
+
+    if 'ignore_unknown_values' in options:
+        job.ignore_unknown_values = bool(options['ignore_unknown_values'])
+
+    write_disp = {
+        "WRITE_APPEND": WriteDisposition.WRITE_APPEND,
+        "WRITE_EMPTY": WriteDisposition.WRITE_EMPTY,
+        "WRITE_TRUNCATE": WriteDisposition.WRITE_TRUNCATE
+    }
+
+    if 'write_disposition' in options:
+        value = options['write_disposition']
+        if value not in write_disp:
+            raise KeyError("Please use only one of the following: "
+                           + ",".join(write_disp.keys()))
+        job.write_disposition = write_disp[options['write_disposition']]
+
+    if 'field_delimiter' in options:
+        job.field_delimiter = options['field_delimiter']
+
+    if 'skip_leading_rows' in options:
+        job.skip_leading_rows = int(options["skip_leading_rows"])
+
+
 class BqGcsTableLoadResource(BqTableBasedResource):
     # LoadTableFromStorageJob
     def __init__(self, table: Table,
                  defTime: int, bqClient: Client,
                  job: LoadTableFromStorageJob,
                  uris: tuple,
-                 schema: tuple):
+                 schema: tuple,
+                 options: dict):
         super(BqGcsTableLoadResource, self)\
             .__init__(table, defTime, bqClient)
         self.job = job
         self.uris = uris
         self.schema = schema
+        self.options = options
 
     def isRunning(self):
         return isJobRunning(self.job)
@@ -344,11 +394,21 @@ class BqGcsTableLoadResource(BqTableBasedResource):
                                            self.schema)
         self.job.source_format = DestinationFormat.NEWLINE_DELIMITED_JSON
         self.job.ignore_unknown_values = True
+        self.job.max_bad_records = 1000
         self.job.write_disposition = WriteDisposition.WRITE_TRUNCATE
+        processLoadTableOptions(self.options, self.job)
         self.job.begin()
 
     def dependsOn(self, other: Resource):
-        return ",".join(self.uris) in set([other.key()])
+        if self == other:
+            return False
+
+        if not isinstance(other, BqExtractTableResource):
+            return False
+        # TODO: this is pretty janky but works (mostly) for now
+        me = set([self.uris[i] for i in range(len(self.uris))])
+        them = set(other.uris.split(","))
+        return len(me.intersection(them)) > 0
 
     def key(self):
         return ".".join([self.table.dataset_name,
@@ -470,6 +530,8 @@ class BqQueryBackedTableResource(BqQueryBasedResource):
         jobid = "-".join(["create", self.table.dataset_name,
                           self.table.name, str(uuid.uuid4())])
         query_job = self.bqClient.run_async_query(jobid, self.query)
+
+        # TODO: this should probably all be options
         query_job.allow_large_results = True
         query_job.flatten_results = False
         query_job.destination = self.table
@@ -563,6 +625,39 @@ class BqQueryBackedTableResource(BqQueryBasedResource):
 #         return 0
 
 
+def processExtractTableOptions(options: dict,
+                               job: ExtractTableToStorageJob):
+    compressions = {
+        "GZIP": Compression.GZIP,
+        "NONE": Compression.NONE,
+    }
+
+    if "compression" in options:
+        value = options["compression"]
+        if value not in compressions:
+            raise KeyError("Please specify only one of " +
+                           compressions.keys())
+        job.compression = compressions[value]
+
+    formats = {
+        "NEWLINE_DELIMITED_JSON": DestinationFormat.NEWLINE_DELIMITED_JSON,
+        "CSV": DestinationFormat.CSV,
+        "AVRO": DestinationFormat.AVRO
+    }
+
+    if "destination_format" in options:
+        value = options['destination_format']
+        if value not in formats:
+            raise KeyError("Please specify only one of " + formats.keys())
+        job.destination_format = formats[value]
+
+    if "field_delimiter" in options:
+        job.field_delimiter = options['field_delimiter']
+
+    if "print_header" in options:
+        job.field_delimiter = bool(options['print_header'])
+
+
 class BqExtractTableResource(Resource):
     def __init__(self,
                  table: Table,
@@ -571,8 +666,7 @@ class BqExtractTableResource(Resource):
                  gcsClient: storage.Client,
                  extractJob: ExtractTableToStorageJob,
                  uris: str,
-                 compression=Compression.GZIP,
-                 destinationFormat=DestinationFormat.NEWLINE_DELIMITED_JSON):
+                 options: dict):
 
         self.extractJob = extractJob
         self.defTime = defTime
@@ -582,8 +676,7 @@ class BqExtractTableResource(Resource):
         self.uris = uris
         # check uris
         (self.bucket, self.pathPrefix) = self.parseBucketAndPrefix(uris)
-        self.compression = compression
-        self.destinationFormat = destinationFormat
+        self.options = options
 
     def create(self):
         jobid = "-".join(["extract", self.table.name,
@@ -591,8 +684,7 @@ class BqExtractTableResource(Resource):
         self.extractJob = self.bqClient.extract_table_to_storage(jobid,
                                                                  self.table,
                                                                  self.uris)
-        self.extractJob.destination_format = self.destinationFormat
-        self.extractJob.compression = self.compression
+        processExtractTableOptions(self.options, self.extractJob)
         self.extractJob.begin()
 
     def key(self):
@@ -680,12 +772,13 @@ def isJobRunning(job):
 
 def parseBucketAndPrefix(uris):
     bucket = uris.replace("gs://", "").split("/")[0]
-    prefix = "/".join(uris.replace("gs://", "").split("/")[:-2])
+    prefix = "/".join(uris.replace("gs://", "").split("/")[1:])
     return (bucket, prefix)
 
 
 def gcsExists(gcsClient, uris):
     (bucket, prefix) = parseBucketAndPrefix(uris)
+    prefix = prefix.replace("*.gz", "")
     bucket = gcsClient.get_bucket(bucket)
     objs = [x for x in bucket.list_blobs(1, prefix=prefix,
                                          delimiter="/")]

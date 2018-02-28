@@ -1,0 +1,1 @@
+select * from {dataset}.test_local_tabbed_data

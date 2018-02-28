@@ -235,13 +235,16 @@ class BqQueryTemplatingFileLoader(FileLoader):
             # check if there is extraction logic
             # todo: we need to populate the extraction job
             if 'extract' in templateVars:
-                extractRsrc = BqExtractTableResource(bqTable,
-                                                     int(mtime*1000),
-                                                     self.bqClient,
-                                                     self.gcsClient, None,
-                                                     templateVars[
-                                                         'extract']
-                                                     )
+                extractRsrc \
+                    = BqExtractTableResource(bqTable,
+                                             int(mtime*1000),
+                                             self.bqClient,
+                                             self.gcsClient, None,
+                                             # TODO: need to discover
+                                             # other jobs previously
+                                             # running
+                                             templateVars['extract'],
+                                             templateVars)
                 # need to check for duplicates here
                 # todo
                 out[extractRsrc.key()] = extractRsrc
@@ -261,10 +264,9 @@ class BqQueryTemplatingFileLoader(FileLoader):
 
             rsrc = BqGcsTableLoadResource(bqTable, int(mtime*1000),
                                           self.bqClient,
-                                          jT, uris, schema)
+                                          jT, uris, schema,
+                                          templateVars)
             out[key] = rsrc
-            # gcsRsrc = GcsResource(self.gcsClient, uris)
-            # out[gcsRsrc.key()] = gcsRsrc
 
         dsetKey = _buildDataSetKey_(bqTable)
         if dsetKey not in out:
