@@ -1,4 +1,1 @@
-# extract:{dataset}:three
-
-
-gs://sharethis-int-tmp/{table}.json.gz
+gs://sharethis-int-tmp/{dataset}.three/*.gz

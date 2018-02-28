@@ -6,13 +6,15 @@ import mock
 from google.api.core.page_iterator import Iterator
 from google.cloud.bigquery.client import Client
 from google.cloud.bigquery.dataset import Dataset
-from google.cloud.bigquery.job import QueryJob, SourceFormat
+from google.cloud.bigquery.job import QueryJob, SourceFormat, \
+    WriteDisposition
 from google.cloud.bigquery.table import Table
 
 import resource
 from resource import strictSubstring, Resource, \
     BqDatasetBackedResource, BqViewBackedTableResource, \
-    BqQueryBasedResource, BqJobs, BqDataLoadTableResource
+    BqQueryBasedResource, BqJobs, BqDataLoadTableResource, \
+    processLoadTableOptions
 
 
 class Test(unittest.TestCase):
@@ -214,4 +216,39 @@ group each by id, description, url
             SourceFormat.CSV,
             BqDataLoadTableResource.detectSourceFormat(
             "a"))
+
+    @mock.patch('google.cloud.bigquery.job.LoadTableFromStorageJob')
+    def test_HandleLoadTableOptionSourceFormat(self, sj):
+        options = {
+            "source_format": "NEWLINE_DELIMITED_JSON"
+        }
+
+        processLoadTableOptions(options, sj)
+        self.assertEquals(sj.write_disposition, SourceFormat.NEWLINE_DELIMITED_JSON)
+
+    @mock.patch('google.cloud.bigquery.job.LoadTableFromStorageJob')
+    def test_HandleLoadTableOptionWriteDisposition(self, sj):
+        options = {"write_disposition": "WRITE_TRUNCATE"}
+
+        processLoadTableOptions(options, sj)
+        self.assertEquals(sj.write_disposition,
+                          WriteDisposition.WRITE_TRUNCATE)
+
+    @mock.patch('google.cloud.bigquery.job.LoadTableFromStorageJob')
+    def test_HandleLoadTableOptionInvalidDispositionOrFormat(self, sj):
+        options = {"write_disposition": "invalid"}
+
+        try:
+            processLoadTableOptions(options, sj)
+            self.fail("unknown value")
+        except KeyError:
+            pass
+
+        options = {"source_format": "invalid"}
+        try:
+            processLoadTableOptions(options, sj)
+            self.fail("unknown value")
+        except KeyError:
+            pass
+
 
