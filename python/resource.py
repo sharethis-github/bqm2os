@@ -40,6 +40,9 @@ class Resource:
     def dump(self):
         return ""
 
+    def __eq__(self, other):
+        raise Exception("Must implement __eq__")
+
 
 class BqJobs:
     def __init__(self, bqClient: Client,
@@ -186,6 +189,14 @@ class BqDatasetBackedResource(Resource):
     def __str__(self):
         return ":".join([self.dataset.project, self.dataset.name])
 
+    def __eq__(self, other):
+        try:
+            return self.key() == other.key() and \
+                   self.dataset.project == other.dataset.project and \
+                   self.dataset.name == other.dataset.name
+        except Exception:
+            return False
+
 
 class BqDataLoadTableResource(Resource):
     """ todo: currently we block during the creation of this
@@ -254,6 +265,12 @@ class BqDataLoadTableResource(Resource):
             return SourceFormat.NEWLINE_DELIMITED_JSON
         except JSONDecodeError:
             return SourceFormat.CSV
+
+    def __eq__(self, other):
+        try:
+            return self.file == other.file and self.key() == other.key()
+        except Exception:
+            return False
 
 
 def makeJobName(parts: list):
@@ -397,6 +414,12 @@ class BqGcsTableLoadResource(BqTableBasedResource):
         return ".".join([self.table.dataset_name,
                          self.table.name])
 
+    def __eq__(self, other):
+        try:
+            return self.key() == other.key() and self.uris == other.uris
+        except Exception:
+            return False
+
 
 class BqQueryBasedResource(BqTableBasedResource):
     """ Base class of query based big query actions """
@@ -406,6 +429,12 @@ class BqQueryBasedResource(BqTableBasedResource):
         self.table = table
         self.bqClient = bqClient
         self.defTime = defTime
+
+    def __eq__(self, other):
+        try:
+            return other.key() == self.key() and self.query == other.query
+        except Exception:
+            return False
 
     def updateTime(self):
         """ time in milliseconds.  None if not created """
@@ -563,37 +592,37 @@ class BqQueryBackedTableResource(BqQueryBasedResource):
     def dump(self):
         return self.query
 
-
-class GcsResource(Resource):
-    def __init__(self, gcsClient, uris: str):
-        self.gcsClient = gcsClient
-        self.uris = uris
-
-    def create(self):
-        pass
-
-    def exists(self):
-        results = set([gcsExists(self.gcsClient, uri) for uri in
-                       self.uris])
-
-        return True in results and len(results) == 1
-
-    def key(self):
-        return ",".join(self.uris)
-
-    def dependsOn(self, resource):
-        return False
-
-    def isRunning(self):
-        return False
-
-    def definitionTime(self):
-        # Todo - should we compute this?
-        return 0
-
-    def updateTime(self):
-        # Todo - should we compute this?
-        return 0
+#
+# class GcsResource(Resource):
+#     def __init__(self, gcsClient, uris: str):
+#         self.gcsClient = gcsClient
+#         self.uris = uris
+#
+#     def create(self):
+#         pass
+#
+#     def exists(self):
+#         results = set([gcsExists(self.gcsClient, uri) for uri in
+#                        self.uris])
+#
+#         return True in results and len(results) == 1
+#
+#     def key(self):
+#         return ",".join(self.uris)
+#
+#     def dependsOn(self, resource):
+#         return False
+#
+#     def isRunning(self):
+#         return False
+#
+#     def definitionTime(self):
+#         # Todo - should we compute this?
+#         return 0
+#
+#     def updateTime(self):
+#         # Todo - should we compute this?
+#         return 0
 
 
 def processExtractTableOptions(options: dict,

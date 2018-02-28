@@ -3,36 +3,40 @@ import unittest
 
 from google.cloud.bigquery.client import Client
 from google.cloud.bigquery.schema import SchemaField
+from google.cloud.storage import Client as GcsClient
+
 
 import mock
 from mock.mock import MagicMock
 
 from loader import DelegatingFileSuffixLoader, FileLoader, \
     parseDatasetTable, \
-    parseDataset, BqDataFileLoader, BqQueryTemplatingFileLoader, TableType, loadSchemaFromString
+    parseDataset, BqQueryTemplatingFileLoader, TableType, loadSchemaFromString
 from resource import BqJobs, BqViewBackedTableResource, \
-    BqQueryBackedTableResource, BqDataLoadTableResource
+    BqQueryBackedTableResource
 
 
 class Test(unittest.TestCase):
 
     @mock.patch('google.cloud.bigquery.Client')
+    @mock.patch('google.cloud.storage.Client')
     @mock.patch('resource.BqJobs')
-    def test_ToggleToTableForTemplatingLoader(self, bqClient: Client,
-                                           bqJobs: BqJobs):
-        self.toggleToTableOrViewForTemplatingLoader(bqClient, bqJobs,
+    def test_ToggleToTableForTemplatingLoader(self, bqClient: Client, gcsClient: GcsClient,
+                                                bqJobs: BqJobs):
+        self.toggleToTableOrViewForTemplatingLoader(bqClient, gcsClient, bqJobs,
                                                     TableType.TABLE,
                                                     BqQueryBackedTableResource)
 
     @mock.patch('google.cloud.bigquery.Client')
+    @mock.patch('google.cloud.storage.Client')
     @mock.patch('resource.BqJobs')
-    def test_ToggleToViewForTemplatingLoader(self, bqClient: Client,
+    def test_ToggleToViewForTemplatingLoader(self, bqClient: Client, gcsClient: GcsClient,
                                                   bqJobs: BqJobs):
-        self.toggleToTableOrViewForTemplatingLoader(bqClient, bqJobs,
+        self.toggleToTableOrViewForTemplatingLoader(bqClient, gcsClient, bqJobs,
                                                     TableType.VIEW,
                                                     BqViewBackedTableResource)
 
-    def toggleToTableOrViewForTemplatingLoader(self, bqClient: Client,
+    def toggleToTableOrViewForTemplatingLoader(self, bqClient: Client, gcsClient: GcsClient,
                                                     bqJobs: BqJobs,
                                                     tableType: TableType,
                                                     theType):
@@ -42,7 +46,7 @@ class Test(unittest.TestCase):
             'adataset'
         bqClient.dataset('adataset').table('atable').project = 'aproject'
 
-        ldr = BqQueryTemplatingFileLoader(bqClient, bqJobs,
+        ldr = BqQueryTemplatingFileLoader(bqClient, gcsClient, bqJobs,
                                           tableType,
                                           {"dataset": "dataset"})
         self.assertEqual(ldr.tableType, tableType)
@@ -50,12 +54,60 @@ class Test(unittest.TestCase):
         ldr.processTemplateVar({ "dataset": "dataset", "table": "foo"},
                                "select * from fiddle.sticks",
                                "afilepath", 0, out)
-        key = "aproject:adataset:atable"
+        key = "adataset:atable"
         self.assertTrue(key in out)
         self.assertTrue(isinstance(out[key], theType))
 
 
-class Test(unittest.TestCase):
+    @mock.patch('google.cloud.bigquery.Client')
+    @mock.patch('google.cloud.storage.Client')
+    @mock.patch('resource.BqJobs')
+    def test_IdenticalButDuplicateDefinitionsAllowed(self, bqClient: Client, gcsClient: GcsClient,
+                                                     bqJobs: BqJobs):
+
+        bqClient.dataset('adataset').table('atable').name = 'atable'
+        bqClient.dataset('adataset').table('atable').dataset_name = \
+            'adataset'
+        bqClient.dataset('adataset').table('atable').project = 'aproject'
+
+        ldr = BqQueryTemplatingFileLoader(bqClient, gcsClient, bqJobs,
+                                          TableType.VIEW,
+                                          {"dataset": "dataset"})
+        out = {}
+        # the introduction of [a,b] because they are unused should complete without error
+        ldr.processTemplateVar({ "dataset": "dataset", "table": "foo", "unusedkey": ["a", "b"]},
+                               "select * from fiddle.sticks",
+                               "afilepath", 0, out)
+
+
+    @mock.patch('google.cloud.bigquery.Client')
+    @mock.patch('google.cloud.storage.Client')
+    @mock.patch('resource.BqJobs')
+    def test_NotIdenticalButDuplicateKeysAreNotAllowed(self, bqClient: Client, gcsClient: GcsClient,
+                                                     bqJobs: BqJobs):
+
+        bqClient.dataset('adataset').table('atable').name = 'atable'
+        bqClient.dataset('adataset').table('atable').dataset_name = \
+            'adataset'
+        bqClient.dataset('adataset').table('atable').project = 'aproject'
+
+        ldr = BqQueryTemplatingFileLoader(bqClient, gcsClient, bqJobs,
+                                          TableType.VIEW,
+                                          {"dataset": "dataset"})
+        out = {}
+        # the introduction of [a,b] because they are unused should complete without error
+        ldr.processTemplateVar({"dataset": "dataset", "table": "foo"},
+                               "select * from fiddle.sticks",
+                               "afilepath", 0, out)
+
+        try:
+            ldr.processTemplateVar({"dataset": "dataset", "table": "foo"},
+                           "select * from fiddle.poles",
+                           "afilepath", 0, out)
+            self.fail("we should have failed here!")
+        except Exception:
+            pass
+
     def test_DelegatingFileLoader_EmptyLoader(self):
         try:
             DelegatingFileSuffixLoader()
@@ -257,6 +309,12 @@ class Test(unittest.TestCase):
                                           mode='repeated')]
         print (json.dumps(jsonFields))
         schema = loadSchemaFromString(json.dumps(jsonFields))
+        expectedStr = "[SchemaField('c', 'string', 'repeated', None, ()), " \
+                      "SchemaField('a', 'record', 'repeated', None, " \
+                      "(SchemaField('b', 'float', 'NULLABLE', None, ()),))]"
+
+        actualStr = str(schema)
+        self.assertEquals(actualStr, expectedStr)
 
 if __name__ == '__main__':
     unittest.main()
