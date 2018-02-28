@@ -2,6 +2,7 @@ atest2 depends on nothing
 atest2.before depends on atest2 atest2.one
 atest2.complex_json_data depends on atest2
 atest2.extract_test_localdata_comma depends on atest2 atest2.test_local_tabbed_data
+atest2.extract_test_localdata_comma_no_header depends on atest2 atest2.test_local_tabbed_data
 atest2.extract_test_localdata_default depends on atest2 atest2.test_local_tabbed_data
 atest2.extract_test_localdata_json depends on atest2 atest2.test_local_tabbed_data
 atest2.extract_test_localdata_tab depends on atest2 atest2.test_local_tabbed_data
@@ -15,6 +16,7 @@ atest2.three depends on atest2
 atest2.two depends on atest2
 atest2.url_expanded_kw depends on atest2 atest2.mergelog_mini_sample
 extract.atest2.extract_test_localdata_comma depends on atest2.extract_test_localdata_comma
+extract.atest2.extract_test_localdata_comma_no_header depends on atest2.extract_test_localdata_comma_no_header
 extract.atest2.extract_test_localdata_default depends on atest2.extract_test_localdata_default
 extract.atest2.extract_test_localdata_json depends on atest2.extract_test_localdata_json
 extract.atest2.extract_test_localdata_tab depends on atest2.extract_test_localdata_tab

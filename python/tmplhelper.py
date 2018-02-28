@@ -41,8 +41,10 @@ def evalTmplRecurse(templateKeys: dict):
     return templateKeysCopy
 
 
-def keysOfTemplate(str):
-    return set([x[1] for x in string.Formatter().parse(str) if x[1]])
+def keysOfTemplate(strr):
+    if not isinstance(strr, str):
+        return set()
+    return set([x[1] for x in string.Formatter().parse(strr) if x[1]])
 
 
 def handleDayDateField(dt: datetime, val) -> str:
