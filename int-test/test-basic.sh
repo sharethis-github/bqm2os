@@ -12,3 +12,7 @@ diff /tmp/debug /int-test/test.expected
 
 echo Dataset for test is ${dataset}
 python /python/bqm2.py --defaultDataset ${dataset} --execute int-test/bq/
+
+# check view recreation
+touch int-test/bq/*.view
+python /python/bqm2.py --defaultDataset ${dataset} --execute int-test/bq/

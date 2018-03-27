@@ -491,9 +491,14 @@ class BqQueryBasedResource(BqTableBasedResource):
 class BqViewBackedTableResource(BqQueryBasedResource):
     def create(self):
         try:
-            self.table.view_query = self.query
             if (self.table.exists()):
                 self.table.delete()
+                self.table = Table(self.table.name,
+                                   self.bqClient.dataset(
+                                       self.table.dataset_name,
+                                       self.table.project))
+
+            self.table.view_query = self.query
             self.table.schema = []
             self.table.create()
         except NotFound:
