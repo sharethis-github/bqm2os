@@ -8,6 +8,8 @@ from json.decoder import JSONDecodeError
 from google.api.core.exceptions import NotFound
 from google.cloud import storage
 from google.cloud.bigquery.client import Client
+from google.cloud.storage.blob import Blob
+from google.cloud.storage.client import Client as GcsClient
 from google.cloud.bigquery.dataset import Dataset
 from google.cloud.bigquery.job import WriteDisposition, \
     QueryPriority, QueryJob, SourceFormat, \
@@ -16,6 +18,8 @@ from google.cloud.bigquery.job import WriteDisposition, \
 import time
 from google.cloud.bigquery.table import Table
 import logging
+
+import iter_util
 
 
 class Resource:
@@ -780,6 +784,52 @@ def gcsExists(gcsClient, uris):
     (bucket, prefix) = parseBucketAndPrefix(uris)
     prefix = prefix.replace("*.gz", "")
     bucket = gcsClient.get_bucket(bucket)
-    objs = [x for x in bucket.list_blobs(1, prefix=prefix,
-                                         delimiter="/")]
-    return len(objs) > 0
+
+    accum = set()
+
+    def v(blob: Blob):
+        accum.add(blob)
+        return False
+
+    def g(iter=None):
+        if iter:
+            return None
+        return bucket.list_blobs(1, prefix=prefix)
+
+    return len(accum) > 0
+
+
+def gcsMaxModTime(gcsClient: GcsClient, pathGlob: str):
+    (bucket, prefix) = parseBucketAndPrefix(pathGlob)
+    globFreePrefix = prefix.split("*")[0]
+
+    print((bucket, prefix))
+    gcsBucket = gcsClient.bucket(bucket)
+    if not gcsBucket:
+        raise Exception("Non existent bucket: " + gcsBucket)
+
+    accum = []
+
+    def visitFunc(blob: Blob):
+        toMatch = prefix.replace("*", ".*")
+        if not re.match(toMatch, blob.name):
+            return True
+
+        mTime = int(blob.time_created.strftime("%s")) * 1000
+        if blob.updated:
+            mTime = int(blob.updated.strftime("%s")) * 1000
+        accum.append(mTime)
+        return True
+
+    def iterFunc(iter=None):
+        if iter:
+            if iter.next_page_token:
+                return gcsBucket.list_blobs(prefix=globFreePrefix,
+                                            page_token=iter.next_page_token)
+            else:
+                return None
+        return gcsBucket.list_blobs(prefix=globFreePrefix)
+        return True
+
+    iter_util.iterate(visitFunc, iterFunc)
+    return len(accum) and max(accum) or -1
