@@ -378,13 +378,15 @@ class BqGcsTableLoadResource(BqTableBasedResource):
                  job: LoadTableFromStorageJob,
                  uris: tuple,
                  schema: tuple,
-                 options: dict):
+                 options: dict,
+                 gcsClient: storage.Client):
         super(BqGcsTableLoadResource, self)\
             .__init__(table, defTime, bqClient)
         self.job = job
         self.uris = uris
         self.schema = schema
         self.options = options
+        self.gcsClient = gcsClient
 
     def isRunning(self):
         return isJobRunning(self.job)
@@ -423,6 +425,9 @@ class BqGcsTableLoadResource(BqTableBasedResource):
             return self.key() == other.key() and self.uris == other.uris
         except Exception:
             return False
+
+    def updateTime(self):
+        return gcsMaxModTimeOfUris(self.gcsClient, self.uris)
 
 
 class BqQueryBasedResource(BqTableBasedResource):
@@ -601,39 +606,6 @@ class BqQueryBackedTableResource(BqQueryBasedResource):
     def dump(self):
         return self.query
 
-#
-# class GcsResource(Resource):
-#     def __init__(self, gcsClient, uris: str):
-#         self.gcsClient = gcsClient
-#         self.uris = uris
-#
-#     def create(self):
-#         pass
-#
-#     def exists(self):
-#         results = set([gcsExists(self.gcsClient, uri) for uri in
-#                        self.uris])
-#
-#         return True in results and len(results) == 1
-#
-#     def key(self):
-#         return ",".join(self.uris)
-#
-#     def dependsOn(self, resource):
-#         return False
-#
-#     def isRunning(self):
-#         return False
-#
-#     def definitionTime(self):
-#         # Todo - should we compute this?
-#         return 0
-#
-#     def updateTime(self):
-#         # Todo - should we compute this?
-#         return 0
-
-
 def processExtractTableOptions(options: dict,
                                job: ExtractTableToStorageJob):
     compressions = {
@@ -803,6 +775,8 @@ def gcsExists(gcsClient, uris):
 
     return len(accum) > 0
 
+def gcsMaxModTimeOfUris(gcsClient: GcsClient, pathGlobs):
+    return max([gcsMaxModTime(gcsClient, g) for g in pathGlobs])
 
 def gcsMaxModTime(gcsClient: GcsClient, pathGlob: str):
     (bucket, prefix) = parseBucketAndPrefix(pathGlob)

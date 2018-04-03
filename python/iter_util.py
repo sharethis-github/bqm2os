@@ -16,7 +16,6 @@ def iterate(visitorFunc, iterFunc):
 
     while iter is not None:
         for t in iter:
-            print("calling visit with " + str(t))
             visitResult = visitorFunc(t)
             if visitResult is True:
                 continue
@@ -26,7 +25,5 @@ def iterate(visitorFunc, iterFunc):
             raise Exception("Illegal return value true or false."
                             "True means continue iteration.  "
                             "False means stop")
-        print("calling iterFunc")
         iter = iterFunc(iter=iter)
-        sleep(1)
 

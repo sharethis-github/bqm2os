@@ -265,7 +265,7 @@ class BqQueryTemplatingFileLoader(FileLoader):
             rsrc = BqGcsTableLoadResource(bqTable, int(mtime*1000),
                                           self.bqClient,
                                           jT, uris, schema,
-                                          templateVars)
+                                          templateVars, self.gcsClient)
             out[key] = rsrc
 
         dsetKey = _buildDataSetKey_(bqTable)
