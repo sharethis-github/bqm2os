@@ -606,6 +606,7 @@ class BqQueryBackedTableResource(BqQueryBasedResource):
     def dump(self):
         return self.query
 
+
 def processExtractTableOptions(options: dict,
                                job: ExtractTableToStorageJob):
     compressions = {
@@ -775,14 +776,15 @@ def gcsExists(gcsClient, uris):
 
     return len(accum) > 0
 
+
 def gcsMaxModTimeOfUris(gcsClient: GcsClient, pathGlobs):
     return max([gcsMaxModTime(gcsClient, g) for g in pathGlobs])
+
 
 def gcsMaxModTime(gcsClient: GcsClient, pathGlob: str):
     (bucket, prefix) = parseBucketAndPrefix(pathGlob)
     globFreePrefix = prefix.split("*")[0]
 
-    print((bucket, prefix))
     gcsBucket = gcsClient.bucket(bucket)
     if not gcsBucket:
         raise Exception("Non existent bucket: " + gcsBucket)

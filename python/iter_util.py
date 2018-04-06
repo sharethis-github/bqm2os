@@ -26,4 +26,3 @@ def iterate(visitorFunc, iterFunc):
                             "True means continue iteration.  "
                             "False means stop")
         iter = iterFunc(iter=iter)
-
