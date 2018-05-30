@@ -41,7 +41,7 @@ if __name__ == "__main__":
         cloudwatch = boto3.client('cloudwatch')
         response = put_alarm_metric(args[0], cloudwatch)
         if response:
-            print("created alarm: ", response.get('MessageId'))
+            print("created alarm: ", response)
         else:
             print("unable to create alarm")
             sys.exit(1)
