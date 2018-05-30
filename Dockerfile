@@ -6,7 +6,7 @@ RUN mkdir /python
 ENV PYTHONPATH /python
 RUN apt-get update
 RUN apt-get install vim -y
-RUN apt-get install jq
+RUN apt-get install jq -y
 RUN apt-get install unzip
 ADD /root /root
 RUN pip install gevent

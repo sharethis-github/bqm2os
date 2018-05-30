@@ -18,6 +18,10 @@ from resource import strictSubstring, Resource, \
 
 
 class Test(unittest.TestCase):
+    def test_getFiltered(self):
+        self.assertTrue(getFiltered(".") == ".")
+        self.assertTrue(getFiltered("@") == " ")
+
     def test_strictSubstring(self):
         self.assertTrue(strictSubstring("A", "AA"))
         self.assertFalse(strictSubstring("A", "A"))
