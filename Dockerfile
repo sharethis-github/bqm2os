@@ -1,13 +1,13 @@
 FROM python
-RUN apt-get install g++
+RUN apt-get install -y g++
 RUN pip install --upgrade pip
 RUN pip install coverage
 RUN mkdir /python
 ENV PYTHONPATH /python
 RUN apt-get update
-RUN apt-get install vim -y
-RUN apt-get install jq -y
-RUN apt-get install unzip
+RUN apt-get install -y vim
+RUN apt-get install -y jq
+RUN apt-get install -y unzip
 ADD /root /root
 RUN pip install gevent
 RUN pip install cython
