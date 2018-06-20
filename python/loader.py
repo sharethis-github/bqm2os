@@ -220,7 +220,9 @@ class BqQueryTemplatingFileLoader(FileLoader):
         if 'project' in templateVars:
             project = templateVars['project']
 
-        bqTable = self.bqClient.dataset(dataset, project=project).table(table)
+        bqTable = self.bqClient.dataset(dataset,
+                                        project=project).table(
+                                            table.replace('-', '_'))
         key = _buildDataSetTableKey_(bqTable)
 
         prev = key in out and out[key] or None

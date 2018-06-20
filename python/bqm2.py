@@ -249,6 +249,7 @@ if __name__ == "__main__":
     client = Client()
     if options.defaultProject:
         kwargs["project"] = options.defaultProject
+        client = Client(project=kwargs["project"])
     else:
         kwargs["project"] = client.project
 
