@@ -38,6 +38,11 @@ def evalTmplRecurse(templateKeys: dict):
         if remaining == len(keysNeeded):
             raise Exception("template vars: " + str(templateKeys) +
                             " contains a circular reference")
+
+    for k, v in templateKeysCopy.items():
+        if k.endswith("_dash2uscore"):
+            templateKeysCopy[k] = templateKeysCopy[k].replace("-", "_")
+
     return templateKeysCopy
 
 
