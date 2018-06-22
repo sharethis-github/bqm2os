@@ -22,6 +22,12 @@ class Test(unittest.TestCase):
         result = evalTmplRecurse(input)
         self.assertEqual(expected, result)
 
+    def testEvalTmplRecurseWithUscoreSuffix(self):
+        input = {'b_dash2uscore': "c-a"}
+        expected = {'b_dash2uscore': 'c_a'}
+        result = evalTmplRecurse(input)
+        self.assertEqual(expected, result)
+
     def testEvalTmplRecurseRecursive(self):
         input = {"a": '{b}', 'b': "{c}", 'c': "d"}
         expected = {'a': 'd', 'b': 'd', 'c': 'd'}
