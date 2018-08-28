@@ -1,4 +1,5 @@
 # bqm2
+
 2nd version of bq materializer - should understand dependencies of executions
 
 # Supported File Suffixes
@@ -18,3 +19,18 @@ project of the dataset which contains the table being loaded to.
 The implication of this is that the service account running the load
 must have Bq Job Create permission on the project of the table being 
 loaded to.
+
+
+# Loader Types
+
+.querytemplate
+
+.view
+
+.uniontable
+
+.unionview (not implemented)
+
+.localdata
+
+.gcsdata

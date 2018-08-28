@@ -236,7 +236,7 @@ class Test(unittest.TestCase):
         self.assertTrue(len(output))
         self.assertTrue("adataset:atable" in output)
         arsrc = output["adataset:atable"]
-        self.assertEqual(arsrc.query, "select * from bar")
+        self.assertEqual(arsrc.queries[0], "select * from bar")
 
     @mock.patch('google.cloud.bigquery.Client')
     @mock.patch('google.cloud.storage.Client')
