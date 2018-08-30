@@ -18,3 +18,13 @@ project of the dataset which contains the table being loaded to.
 The implication of this is that the service account running the load
 must have Bq Job Create permission on the project of the table being 
 loaded to.
+
+
+### How to use locally
+./run.sh bash
+cd /mnt/templates/bq/domo2
+python /python/bqm2.py --defaultProject sharethis.com:quixotic-spot-526 --defaultDataset domo2 --dumpToFolder /tmp .
+
+./run.sh bash
+cd /mnt/templates/bq/domo2
+python /python/bqm2.py --defaultProject sharethis.com:quixotic-spot-526 --defaultDataset domo2 --execute .

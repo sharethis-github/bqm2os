@@ -93,6 +93,12 @@ def explodeTemplate(templateVars: dict):
     for (k, v) in templateVars.items():
         if 'yyyymmdd' in k:
             templateVars[k] = handleDayDateField(datetime.today(), v)
+        elif 'yyyymm' in k:
+            dates = handleDayDateField(datetime.today(), v)
+            for index in range(0, len(dates)):
+                dates[index] = dates[index][0:6]
+            dates = list(set(dates))
+            templateVars[k] = dates
 
     topremute = []
     for (k, v) in templateVars.items():
