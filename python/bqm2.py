@@ -261,6 +261,11 @@ if __name__ == "__main__":
 
     builder = DependencyBuilder(
         DelegatingFileSuffixLoader(
+            uniontable=BqQueryTemplatingFileLoader(client, gcsClient,
+                                                   bqJobs,
+                                                   TableType.UNION_TABLE,
+                                                   kwargs),
+
             querytemplate=BqQueryTemplatingFileLoader(client, gcsClient,
                                                       bqJobs,
                                                       TableType.TABLE,

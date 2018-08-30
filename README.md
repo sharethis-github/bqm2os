@@ -1,4 +1,5 @@
 # bqm2
+
 2nd version of bq materializer - should understand dependencies of executions
 
 # Supported File Suffixes
@@ -28,3 +29,17 @@ python /python/bqm2.py --defaultProject sharethis.com:quixotic-spot-526 --defaul
 ./run.sh bash
 cd /mnt/templates/bq/domo2
 python /python/bqm2.py --defaultProject sharethis.com:quixotic-spot-526 --defaultDataset domo2 --execute .
+
+# Loader Types
+
+.querytemplate
+
+.view
+
+.uniontable
+
+.unionview (not implemented)
+
+.localdata
+
+.gcsdata

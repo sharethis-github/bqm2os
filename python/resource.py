@@ -423,16 +423,20 @@ class BqGcsTableLoadResource(BqTableBasedResource):
 
 class BqQueryBasedResource(BqTableBasedResource):
     """ Base class of query based big query actions """
-    def __init__(self, query: str, table: Table,
+    def __init__(self, queries: list, table: Table,
                  defTime: int, bqClient: Client):
-        self.query = query
+        self.queries = queries
         self.table = table
         self.bqClient = bqClient
         self.defTime = defTime
 
+        if not isinstance(self.queries, list):
+            raise Exception("queries must be of type list")
+
     def __eq__(self, other):
         try:
-            return other.key() == self.key() and self.query == other.query
+            return other.key() == self.key() \
+                   and self.makeFinalQuery() == other.makeFinalQuery()
         except Exception:
             return False
 
@@ -442,12 +446,12 @@ class BqQueryBasedResource(BqTableBasedResource):
         createdTime = self.table.modified
 
         if createdTime:
-            # hijack this step to update description
+            # hijack this step to update description - ugh - debt supreme
             if not self.table.description:
                 self.table.description = "\n".join(["This table/view was " +
                                                     "created with the " +
                                                     "following query", "",
-                                                    self.query, "",
+                                                    self.makeFinalQuery(), "",
                                                     "Edits will not be "
                                                     "saved"])
                 self.table.update()
@@ -475,7 +479,7 @@ class BqQueryBasedResource(BqTableBasedResource):
         if self == other:
             return False
 
-        filtered = getFiltered(self.query)
+        filtered = getFiltered(self.makeFinalQuery())
         if strictSubstring("".join(["", other.key(), " "]), filtered):
             return True
 
@@ -486,6 +490,14 @@ class BqQueryBasedResource(BqTableBasedResource):
                 and strictSubstring(other.key(), self.key()):
             return True
         return False
+
+    def addQuery(self, query):
+        s = set(self.queries)
+        if query not in s:
+            self.queries.append(query)
+
+    def makeFinalQuery(self):
+        return "\nunion all\n".join(self.queries)
 
 
 class BqViewBackedTableResource(BqQueryBasedResource):
@@ -498,7 +510,7 @@ class BqViewBackedTableResource(BqQueryBasedResource):
                                        self.table.dataset_name,
                                        self.table.project))
 
-            self.table.view_query = self.query
+            self.table.view_query = self.makeFinalQuery()
             self.table.schema = []
             self.table.create()
         except NotFound:
@@ -511,7 +523,7 @@ class BqViewBackedTableResource(BqQueryBasedResource):
         return False
 
     def dump(self):
-        return self.query
+        return self.makeFinalQuery()
 
 
 def getFiltered(query):
@@ -526,10 +538,10 @@ def strictSubstring(contained, container):
 
 
 class BqQueryBackedTableResource(BqQueryBasedResource):
-    def __init__(self, query: str, table: Table,
+    def __init__(self, queries: list, table: Table,
                  defTime: int, bqClient: Client, queryJob: QueryJob):
         super(BqQueryBackedTableResource, self)\
-            .__init__(query, table, defTime, bqClient)
+            .__init__(queries, table, defTime, bqClient)
         self.queryJob = queryJob
 
     def create(self):
@@ -538,7 +550,7 @@ class BqQueryBackedTableResource(BqQueryBasedResource):
 
         jobid = "-".join(["create", self.table.dataset_name,
                           self.table.name, str(uuid.uuid4())])
-        query_job = self.bqClient.run_async_query(jobid, self.query)
+        query_job = self.bqClient.run_async_query(jobid, self.makeFinalQuery())
 
         # TODO: this should probably all be options
         query_job.allow_large_results = True
@@ -560,7 +572,7 @@ class BqQueryBackedTableResource(BqQueryBasedResource):
             return False
 
     def dump(self):
-        return self.query
+        return self.makeFinalQuery()
 
 
 class BqQueryBackedTableResource(BqQueryBasedResource):
@@ -576,7 +588,7 @@ class BqQueryBackedTableResource(BqQueryBasedResource):
 
         jobid = "-".join(["create", self.table.dataset_name,
                           self.table.name, str(uuid.uuid4())])
-        query_job = self.bqClient.run_async_query(jobid, self.query)
+        query_job = self.bqClient.run_async_query(jobid, self.makeFinalQuery())
         query_job.allow_large_results = True
         query_job.flatten_results = False
         query_job.destination = self.table
@@ -599,7 +611,7 @@ class BqQueryBackedTableResource(BqQueryBasedResource):
             return False
 
     def dump(self):
-        return self.query
+        return self.makeFinalQuery()
 
 #
 # class GcsResource(Resource):

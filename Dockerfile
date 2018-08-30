@@ -1,4 +1,4 @@
-FROM python
+FROM python:3.6
 RUN apt-get install -y g++
 RUN pip install --upgrade pip
 RUN pip install coverage

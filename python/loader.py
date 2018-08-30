@@ -119,6 +119,18 @@ class TableType(Enum):
     TABLE = 2
     TABLE_EXTRACT = 3
     TABLE_GCS_LOAD = 4
+    UNION_TABLE = 5
+    UNION_VIEW = 6
+
+
+class BqUnionFileLoader(FileLoader):
+    def __init__(self):
+        pass
+
+    def load(self, file) -> Resource:
+        """ The resource loader will attempt to load the resources
+        which it handles from the file arg """
+        pass
 
 
 class BqQueryTemplatingFileLoader(FileLoader):
@@ -229,7 +241,7 @@ class BqQueryTemplatingFileLoader(FileLoader):
 
         if self.tableType == TableType.TABLE:
             jT = self.bqJobs.getJobForTable(bqTable)
-            arsrc = BqQueryBackedTableResource(query, bqTable,
+            arsrc = BqQueryBackedTableResource([query], bqTable,
                                                int(mtime * 1000),
                                                self.bqClient,
                                                queryJob=jT)
@@ -247,11 +259,9 @@ class BqQueryTemplatingFileLoader(FileLoader):
                                              # running
                                              templateVars['extract'],
                                              templateVars)
-                # need to check for duplicates here
-                # todo
                 out[extractRsrc.key()] = extractRsrc
         elif self.tableType == TableType.VIEW:
-            arsrc = BqViewBackedTableResource(query, bqTable,
+            arsrc = BqViewBackedTableResource([query], bqTable,
                                               int(mtime * 1000),
                                               self.bqClient)
             out[key] = arsrc
@@ -269,13 +279,25 @@ class BqQueryTemplatingFileLoader(FileLoader):
                                           jT, uris, schema,
                                           templateVars)
             out[key] = rsrc
+        elif self.tableType == TableType.UNION_TABLE:
+            if key in out:
+                arsrc = out[key]
+                arsrc.addQuery(query)
+            else:
+                jT = self.bqJobs.getJobForTable(bqTable)
+                arsrc = BqQueryBackedTableResource([query], bqTable,
+                                                   int(mtime * 1000),
+                                                   self.bqClient,
+                                                   queryJob=jT)
+                out[key] = arsrc
 
         dsetKey = _buildDataSetKey_(bqTable)
         if dsetKey not in out:
             out[dsetKey] = cacheDataSet(self.bqClient, bqTable,
                                         self.datasets)
 
-        if prev and prev != out[key]:
+        if prev and prev != out[key] and \
+                self.tableType != TableType.UNION_TABLE:
             raise Exception("Templating generated duplicate "
                             "tables outputs for " + filePath)
 
