@@ -46,8 +46,8 @@ class Resource:
 
 class BqJobs:
     def __init__(self, bqClient: Client,
-                 tableToJobMap: dict={},
-                 pageSize: int=1000, page_limit: int=1):
+                 tableToJobMap: dict = {},
+                 pageSize: int = 1000, page_limit: int = 1):
         self.bqClient = bqClient
         self.tableToJobMap = tableToJobMap
         self.page_limit = page_limit
@@ -475,7 +475,7 @@ class BqQueryBasedResource(BqTableBasedResource):
         if self == other:
             return False
 
-        filtered = re.sub('[^0-9a-zA-Z\._]+', ' ', self.query)
+        filtered = re.sub('[^0-9a-zA-Z._]+', ' ', self.query)
         if strictSubstring("".join(["", other.key(), " "]), filtered):
             return True
 
