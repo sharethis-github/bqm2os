@@ -1,7 +1,7 @@
-
 import optparse
 import sys
 import boto3
+import boto.utils
 
 
 def send_message(queue: str, message: str, sqs):
@@ -27,7 +27,8 @@ if __name__ == "__main__":
         sys.exit(1)
     else:
         # Get the service resource
-        sqs = boto3.resource('sqs')
+        region_name = boto.utils.get_instance_identity()['document']['region']
+        sqs = boto3.resource('sqs', region_name=region_name)
         response = send_message(args[0], args[1], sqs)
         if response:
             print("sent message: ", response.get('MessageId'))
