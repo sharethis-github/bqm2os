@@ -29,7 +29,7 @@ loaded to.
 
 .uniontable
 
-.unionview (not implemented)
+.unionview
 
 .localdata
 

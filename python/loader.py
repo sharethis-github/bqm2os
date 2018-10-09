@@ -291,6 +291,16 @@ class BqQueryTemplatingFileLoader(FileLoader):
                                                    queryJob=jT)
                 out[key] = arsrc
 
+        elif self.tableType == TableType.UNION_VIEW:
+            if key in out:
+                arsrc = out[key]
+                arsrc.addQuery(query)
+            else:
+                arsrc = BqViewBackedTableResource([query], bqTable,
+                                                   int(mtime * 1000),
+                                                   self.bqClient)
+                out[key] = arsrc
+
         dsetKey = _buildDataSetKey_(bqTable)
         if dsetKey not in out:
             out[dsetKey] = cacheDataSet(self.bqClient, bqTable,
