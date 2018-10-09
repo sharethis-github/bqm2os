@@ -297,8 +297,8 @@ class BqQueryTemplatingFileLoader(FileLoader):
                 arsrc.addQuery(query)
             else:
                 arsrc = BqViewBackedTableResource([query], bqTable,
-                                                   int(mtime * 1000),
-                                                   self.bqClient)
+                                                  int(mtime * 1000),
+                                                  self.bqClient)
                 out[key] = arsrc
 
         dsetKey = _buildDataSetKey_(bqTable)
