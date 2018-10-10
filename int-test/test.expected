@@ -15,6 +15,7 @@ atest2.test_ab depends on atest2
 atest2.test_cd depends on atest2
 atest2.test_local_json_data depends on atest2
 atest2.test_local_tabbed_data depends on atest2
+atest2.test_unionview depends on atest2 atest2.test_ab atest2.test_cd
 atest2.three depends on atest2
 atest2.two depends on atest2
 atest2.url_expanded_kw depends on atest2 atest2.mergelog_mini_sample
