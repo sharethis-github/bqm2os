@@ -265,7 +265,10 @@ if __name__ == "__main__":
                                                    bqJobs,
                                                    TableType.UNION_TABLE,
                                                    kwargs),
-
+            unionview=BqQueryTemplatingFileLoader(client, gcsClient,
+                                                  bqJobs,
+                                                  TableType.UNION_VIEW,
+                                                  kwargs),
             querytemplate=BqQueryTemplatingFileLoader(client, gcsClient,
                                                       bqJobs,
                                                       TableType.TABLE,

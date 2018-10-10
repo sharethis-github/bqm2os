@@ -209,6 +209,34 @@ class Test(unittest.TestCase):
                      "project": "aproject"}]
         self.assertEqual(result, expected)
 
+    @mock.patch('google.cloud.bigquery.Client')
+    @mock.patch('google.cloud.storage.Client')
+    @mock.patch('resource.BqJobs')
+    def testProcessTemplateVarUnionView(self, bqClient, bqJobs, gcsClient):
+        bqClient.dataset('adataset').table('atable').name = 'atable'
+        bqClient.dataset('adataset').table('atable').dataset_name = 'adataset'
+        bqClient.dataset('adataset').table('atable').project = 'aproject'
+        unionViewLoader = BqQueryTemplatingFileLoader(bqClient, gcsClient, bqJobs, TableType.UNION_VIEW,
+                                            {'dataset': 'default', 'project': 'aproject'})
+        templateVar1 = {
+            'table': 'atable',
+            'dataset': 'adataset',
+            "foo": "bar1",
+        }
+        templateVar2 = {
+            'table': 'atable',
+            'dataset': 'adataset',
+            "foo": "bar2",
+        }
+        output = {}
+        unionViewLoader.processTemplateVar(templateVar1, "select * from {foo}",
+                                  "filepath", 0, output)
+        unionViewLoader.processTemplateVar(templateVar2, "select * from {foo}",
+                                           "filepath", 0, output)
+        self.assertTrue(len(output))
+        self.assertTrue("adataset:atable" in output)
+        arsrc = output["adataset:atable"]
+        self.assertEqual(arsrc.makeFinalQuery(), """select * from bar1\nunion all\nselect * from bar2""")
 
     @mock.patch('google.cloud.bigquery.Client')
     @mock.patch('google.cloud.storage.Client')
