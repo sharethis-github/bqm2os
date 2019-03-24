@@ -274,7 +274,7 @@ class BqQueryTemplatingFileLoader(FileLoader):
             with open(filePath + ".schema") as schemaFile:
                 schema = loadSchemaFromString(schemaFile.read().strip())
 
-            rsrc = BqGcsTableLoadResource(bqTable, int(mtime*1000),
+            rsrc = BqGcsTableLoadResource(bqTable, None,
                                           self.bqClient,
                                           jT, uris, schema,
                                           templateVars)
@@ -286,7 +286,7 @@ class BqQueryTemplatingFileLoader(FileLoader):
             else:
                 jT = self.bqJobs.getJobForTable(bqTable)
                 arsrc = BqQueryBackedTableResource([query], bqTable,
-                                                   int(mtime * 1000),
+                                                   None,
                                                    self.bqClient,
                                                    queryJob=jT)
                 out[key] = arsrc
@@ -297,7 +297,7 @@ class BqQueryTemplatingFileLoader(FileLoader):
                 arsrc.addQuery(query)
             else:
                 arsrc = BqViewBackedTableResource([query], bqTable,
-                                                  int(mtime * 1000),
+                                                  None,
                                                   self.bqClient)
                 out[key] = arsrc
 

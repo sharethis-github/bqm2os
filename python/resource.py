@@ -3,6 +3,7 @@ import uuid
 import re
 from enum import Enum
 
+import hashlib
 from json.decoder import JSONDecodeError
 
 from google.api.core.exceptions import NotFound
@@ -17,7 +18,6 @@ import time
 from google.cloud.bigquery.table import Table
 import logging
 
-
 class Resource:
     def exists(self):
         raise Exception("Please implement")
@@ -29,6 +29,10 @@ class Resource:
         raise Exception("Please implement")
 
     def create(self):
+        raise Exception("Please implement")
+
+    def shouldUpdate(self):
+        print("I am a ", self)
         raise Exception("Please implement")
 
     def key(self):
@@ -184,6 +188,9 @@ class BqDatasetBackedResource(Resource):
         return False
 
     def isRunning(self):
+        return False
+
+    def shouldUpdate(self):
         return False
 
     def __str__(self):
@@ -440,20 +447,33 @@ class BqQueryBasedResource(BqTableBasedResource):
         except Exception:
             return False
 
+    def makeQueryHashTag(self):
+        finalQuery = self.makeFinalQuery()
+        md5hash = "queryhash:" + hashlib.md5(
+            finalQuery.encode("utf-8")).hexdigest()
+        return md5hash
+
     def updateTime(self):
         """ time in milliseconds.  None if not created """
         self.table.reload()
         createdTime = self.table.modified
 
         if createdTime:
+            # getting even more debt ridden
+            finalQuery = self.makeFinalQuery()
             # hijack this step to update description - ugh - debt supreme
             if not self.table.description:
-                self.table.description = "\n".join(["This table/view was " +
+                self.table.description = "\n".join(["This table/view "
+                                                     "was " +
                                                     "created with the " +
-                                                    "following query", "",
-                                                    self.makeFinalQuery(), "",
-                                                    "Edits will not be "
-                                                    "saved"])
+                                                    "following query",
+                                                    "", "/**",
+                                                    finalQuery, "*/",
+                                                    "Edits to this "
+                                                    "description will not "
+                                                    "be saved", "Do not "
+                                                                "edit", "",
+                                                    self.makeQueryHashTag()])
                 self.table.update()
             return int(createdTime.strftime("%s")) * 1000
         return None
@@ -499,6 +519,19 @@ class BqQueryBasedResource(BqTableBasedResource):
     def makeFinalQuery(self):
         return "\nunion all\n".join(self.queries)
 
+    def shouldUpdate(self):
+        self.updateTime()
+
+        if not self.makeQueryHashTag() in self.table.description:
+            print("updating because query hash is not in the description")
+            return True
+
+        if self.defTime is not None and self.defTime > self.updateTime():
+            print("updating because ", self.defTime, self.updateTime())
+            return True
+
+        return False
+
 
 class BqViewBackedTableResource(BqQueryBasedResource):
     def create(self):
@@ -541,7 +574,7 @@ class BqQueryBackedTableResource(BqQueryBasedResource):
     def __init__(self, queries: list, table: Table,
                  defTime: int, bqClient: Client, queryJob: QueryJob):
         super(BqQueryBackedTableResource, self)\
-            .__init__(queries, table, defTime, bqClient)
+            .__init__(queries, table, None, bqClient)
         self.queryJob = queryJob
 
     def create(self):
@@ -579,7 +612,7 @@ class BqQueryBackedTableResource(BqQueryBasedResource):
     def __init__(self, query: str, table: Table,
                  defTime: int, bqClient: Client, queryJob: QueryJob):
         super(BqQueryBackedTableResource, self)\
-            .__init__(query, table, defTime, bqClient)
+            .__init__(query, table, None, bqClient)
         self.queryJob = queryJob
 
     def create(self):
@@ -690,7 +723,7 @@ class BqExtractTableResource(Resource):
                  options: dict):
 
         self.extractJob = extractJob
-        self.defTime = defTime
+        self.defTime = None
         self.table = table
         self.bqClient = bqClient
         self.gcsClient = gcsClient

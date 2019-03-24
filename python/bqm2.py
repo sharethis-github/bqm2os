@@ -154,9 +154,7 @@ class DependencyExecutor:
                     print("executing: because it doesn't exist ", n)
                     self.resources[n].create()
                     running.add(n)
-
-                elif self.resources[n].definitionTime() \
-                        > self.resources[n].updateTime():
+                elif self.resources[n].shouldUpdate():
                     self.handleRetries(retries, n)
                     print("executing: because its definition is newer "
                           "than last created ",
@@ -181,7 +179,9 @@ class DependencyExecutor:
                         continue
                     if k not in self.dependencies:
                         kDateTime = self.resources[k].updateTime()
-                        if kDateTime > self.resources[n].definitionTime():
+                        if not self.resources[n].definitionTime():
+                            self.resources[n].defTime = kDateTime
+                        elif kDateTime > self.resources[n].definitionTime():
                             self.resources[n].defTime = kDateTime
                         torm.add(k)
 
