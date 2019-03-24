@@ -354,11 +354,12 @@ class BqQueryTemplatingFileLoader(FileLoader):
 
 class BqDataFileLoader(FileLoader):
     def __init__(self, bqClient: Client, defaultDataset=None,
-                 defaultProject=None):
+                 defaultProject=None, bqJobs=None):
         self.bqClient = bqClient
         self.defaultDataset = defaultDataset
         self.defaultProject = defaultProject
         self.datasets = {}
+        self.bqJobs = bqJobs
 
     def load(self, filePath):
         mtime = getmtime(filePath)
@@ -371,10 +372,12 @@ class BqDataFileLoader(FileLoader):
         with open(schemaFilePath) as schemaFile:
             schema = loadSchemaFromString(schemaFile.read().strip())
 
+        jT = self.bqJobs.getJobForTable(bqTable)
+
         ret = []
         ret.append(BqDataLoadTableResource(filePath, bqTable, schema,
-                                           int(mtime * 1000),
-                                           self.bqClient))
+                                           None,
+                                           self.bqClient, jT))
         ret.append(cacheDataSet(self.bqClient, bqTable,
                                 self.datasets))
         return ret
