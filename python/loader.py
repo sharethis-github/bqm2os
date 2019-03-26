@@ -162,6 +162,7 @@ class BqQueryTemplatingFileLoader(FileLoader):
         """
 
         :param bqClient: The big query client to use
+        :param gcsClient: THe gcs client to use
         :param bqJobs: An initialized BqJobs
         :param tableType Either TABLE or VIEW
         :param defaultDataset: A default dataset to use in templates
@@ -275,7 +276,7 @@ class BqQueryTemplatingFileLoader(FileLoader):
                 schema = loadSchemaFromString(schemaFile.read().strip())
 
             rsrc = BqGcsTableLoadResource(bqTable, None,
-                                          self.bqClient,
+                                          self.bqClient, self.gcsClient,
                                           jT, uris, schema,
                                           templateVars)
             out[key] = rsrc

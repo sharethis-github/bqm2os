@@ -406,6 +406,7 @@ class BqGcsTableLoadResource(BqTableBasedResource):
     # LoadTableFromStorageJob
     def __init__(self, table: Table,
                  defTime: int, bqClient: Client,
+                 gcsClient: storage.Client,
                  job: LoadTableFromStorageJob,
                  uris: tuple,
                  schema: tuple,
@@ -413,6 +414,7 @@ class BqGcsTableLoadResource(BqTableBasedResource):
         super(BqGcsTableLoadResource, self)\
             .__init__(table, defTime, bqClient)
         self.job = job
+        self.gcsClient = gcsClient,
         self.uris = uris
         self.schema = schema
         self.options = options
@@ -444,6 +446,24 @@ class BqGcsTableLoadResource(BqTableBasedResource):
         me = set([self.uris[i] for i in range(len(self.uris))])
         them = set(other.uris.split(","))
         return len(me.intersection(them)) > 0
+
+    def updateTime(self):
+        objs = [int(o.updated.timestamp() * 1000) for o in
+                self.gcsClient.bucket(self.bucket).list_blobs(
+                prefix=self.pathPrefix)]
+
+        if len(objs) == 0:
+            return self.defTime
+
+        return max(objs)
+
+    def shouldUpdate(self):
+        self.table.reload()
+        createdTime = self.table.modified
+        if not createdTime:
+            return False
+
+        return self.updateTime() > int(createdTime.strftime("%s")) * 1000
 
     def key(self):
         return ".".join([self.table.dataset_name,
@@ -766,6 +786,11 @@ class BqExtractTableResource(Resource):
         """ Time in milliseconds """
         return self.defTime
 
+    def parseBucketAndPrefix(self, uris):
+        bucket = uris.replace("gs://", "").split("/")[0]
+        prefix = "/".join(uris.replace("gs://", "").split("/")[:-2])
+        return (bucket, prefix)
+
     def updateTime(self):
         objs = [int(o.updated.timestamp() * 1000) for o in
                 self.gcsClient.bucket(self.bucket).list_blobs(
@@ -776,10 +801,14 @@ class BqExtractTableResource(Resource):
 
         return max(objs)
 
-    def parseBucketAndPrefix(self, uris):
-        bucket = uris.replace("gs://", "").split("/")[0]
-        prefix = "/".join(uris.replace("gs://", "").split("/")[:-2])
-        return (bucket, prefix)
+    def shouldUpdate(self):
+        self.table.reload()
+        createdTime = self.table.modified
+        if not createdTime:
+            return False
+
+        return self.updateTime() < int(createdTime.strftime("%s")) * 1000
+
 
 
 def wait_for_job(job: QueryJob):
