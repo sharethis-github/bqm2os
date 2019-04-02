@@ -17,7 +17,7 @@ echo "SRC: $SRC_DIR"
 
 # get creds
 mkdir -p /tmp/creds
-docker run -ti -v ~/.aws/:/root/.aws -v /tmp/creds:/tmp/creds -e AWS_DEFAULT_PROFILE=prod -e AWS_DEFAULT_REGION=us-east-1 docker.io/stops/secrets-manager-v2:5b20bdefaa python /src/client.py k8app__bq-third-party__staging__bqm2-json__gcloud-private-key /tmp/creds/gcloud-private-key
+docker run -ti -v ~/.aws/mfa:/root/.aws/credentials -v /tmp/creds:/tmp/creds -e AWS_DEFAULT_REGION=us-east-1 docker.io/stops/secrets-manager-v2:5b20bdefaa python /src/client.py k8app__bq-third-party__staging__bqm2-json__gcloud-private-key /tmp/creds/gcloud-private-key
 
 docker run -e GOOGLE_APPLICATION_CREDENTIALS=/gcloud-private-key \
 -v $SRC_DIR/config/templates/secrets/taxonomy-run:/mnt/run \
@@ -30,7 +30,7 @@ docker run -e GOOGLE_APPLICATION_CREDENTIALS=/gcloud-private-key \
 -v $(pwd)/python:/python \
 -v $(pwd)/test:/test \
 -v $(pwd)/int-test:/int-test \
--v ~/.aws:/root/.aws \
+-v ~/.aws/mfa:/root/.aws/credentials \
 -ti --rm $imagename:$current_commit $@
 
 rm -rf /tmp/creds/gcloud-private-key
