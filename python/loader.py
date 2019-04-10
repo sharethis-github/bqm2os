@@ -109,8 +109,7 @@ def cacheDataSet(bqClient: Client, bqTable: Table, datasets: dict):
     dsetKey = _buildDataSetKey_(bqTable)
     if dsetKey not in datasets:
         dataset = bqClient.dataset(bqTable.dataset_name, bqTable.project)
-        datasets[dsetKey] = BqDatasetBackedResource(dataset, 0,
-                                                    bqClient)
+        datasets[dsetKey] = BqDatasetBackedResource(dataset, bqClient)
     return datasets[dsetKey]
 
 
@@ -243,7 +242,6 @@ class BqQueryTemplatingFileLoader(FileLoader):
         if self.tableType == TableType.TABLE:
             jT = self.bqJobs.getJobForTable(bqTable)
             arsrc = BqQueryBackedTableResource([query], bqTable,
-                                               int(mtime * 1000),
                                                self.bqClient,
                                                queryJob=jT)
             out[key] = arsrc
@@ -252,7 +250,6 @@ class BqQueryTemplatingFileLoader(FileLoader):
             if 'extract' in templateVars:
                 extractRsrc \
                     = BqExtractTableResource(bqTable,
-                                             int(mtime*1000),
                                              self.bqClient,
                                              self.gcsClient, None,
                                              # TODO: need to discover
@@ -263,7 +260,6 @@ class BqQueryTemplatingFileLoader(FileLoader):
                 out[extractRsrc.key()] = extractRsrc
         elif self.tableType == TableType.VIEW:
             arsrc = BqViewBackedTableResource([query], bqTable,
-                                              int(mtime * 1000),
                                               self.bqClient)
             out[key] = arsrc
 
@@ -275,8 +271,9 @@ class BqQueryTemplatingFileLoader(FileLoader):
             with open(filePath + ".schema") as schemaFile:
                 schema = loadSchemaFromString(schemaFile.read().strip())
 
-            rsrc = BqGcsTableLoadResource(bqTable, None,
-                                          self.bqClient, self.gcsClient,
+            rsrc = BqGcsTableLoadResource(bqTable,
+                                          self.bqClient,
+                                          self.gcsClient,
                                           jT, uris, schema,
                                           templateVars)
             out[key] = rsrc
@@ -287,7 +284,6 @@ class BqQueryTemplatingFileLoader(FileLoader):
             else:
                 jT = self.bqJobs.getJobForTable(bqTable)
                 arsrc = BqQueryBackedTableResource([query], bqTable,
-                                                   None,
                                                    self.bqClient,
                                                    queryJob=jT)
                 out[key] = arsrc
@@ -298,7 +294,6 @@ class BqQueryTemplatingFileLoader(FileLoader):
                 arsrc.addQuery(query)
             else:
                 arsrc = BqViewBackedTableResource([query], bqTable,
-                                                  None,
                                                   self.bqClient)
                 out[key] = arsrc
 
@@ -377,7 +372,6 @@ class BqDataFileLoader(FileLoader):
 
         ret = []
         ret.append(BqDataLoadTableResource(filePath, bqTable, schema,
-                                           None,
                                            self.bqClient, jT))
         ret.append(cacheDataSet(self.bqClient, bqTable,
                                 self.datasets))

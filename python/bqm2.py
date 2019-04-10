@@ -136,6 +136,11 @@ class DependencyExecutor:
     def execute(self, checkFrequency=10, maxConcurrent=10):
         running = set([])
         retries = defaultdict(lambda: self.maxRetry)
+
+        # def update times is a dict of maximum of the update
+        # times of the dependencies of a resource
+
+        depUpdateTimes = defaultdict(lambda: 0)
         while len(self.dependencies):
             todel = set([])
             for n in sorted(self.dependencies.keys()):
@@ -172,6 +177,7 @@ class DependencyExecutor:
                     print("max concurrent running already")
                     break
 
+            # n-squared
             for n in sorted(self.dependencies.keys()):
                 torm = set([])
                 for k in self.dependencies[n]:
@@ -179,10 +185,7 @@ class DependencyExecutor:
                         continue
                     if k not in self.dependencies:
                         kDateTime = self.resources[k].updateTime()
-                        if not self.resources[n].definitionTime():
-                            self.resources[n].defTime = kDateTime
-                        elif kDateTime > self.resources[n].definitionTime():
-                            self.resources[n].defTime = kDateTime
+                        depUpdateTimes[n] = max(depUpdateTimes[n], kDateTime)
                         torm.add(k)
 
                 self.dependencies[n] = self.dependencies[n] - torm

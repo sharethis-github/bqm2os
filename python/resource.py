@@ -26,9 +26,6 @@ class Resource:
     def updateTime(self):
         raise Exception("Please implement")
 
-    def definitionTime(self):
-        raise Exception("Please implement")
-
     def create(self):
         raise Exception("Please implement")
 
@@ -156,10 +153,9 @@ class BqDatasetBackedResource(Resource):
      of the dataset such as ttl of tables exist
     """
     def __init__(self, dataset: Dataset,
-                 defTime: int, bqClient: Client):
+                 bqClient: Client):
         self.dataset = dataset
         self.bqClient = bqClient
-        self.defTime = defTime
         self.existFlag = self.dataset.exists()
         if self.existFlag:
             self.dataset.reload()
@@ -173,10 +169,6 @@ class BqDatasetBackedResource(Resource):
         if createdTime:
             return int(createdTime.strftime("%s")) * 1000
         return None
-
-    def definitionTime(self):
-        """ Time in milliseconds """
-        return self.defTime
 
     def create(self):
         self.dataset.create()
@@ -212,11 +204,9 @@ def makeJobName(parts: list):
 # base resource class for all table back resources
 class BqTableBasedResource(Resource):
     """ Base class of query based big query actions """
-    def __init__(self, table: Table,
-                 defTime: int, bqClient: Client):
+    def __init__(self, table: Table, bqClient: Client):
         self.table = table
         self.bqClient = bqClient
-        self.defTime = defTime
 
     def exists(self):
         return self.table.exists()
@@ -229,10 +219,6 @@ class BqTableBasedResource(Resource):
         if createdTime:
             return int(createdTime.strftime("%s")) * 1000
         return None
-
-    def definitionTime(self):
-        """ Time in milliseconds """
-        return self.defTime
 
     def create(self):
         raise Exception("implement")
@@ -269,16 +255,14 @@ class BqDataLoadTableResource(BqTableBasedResource):
     create and put it in the background
     """
     def __init__(self, file: str, table: Table,
-                 schema: tuple, defTime: int,
-                 bqClient: Client, job: _AsyncJob):
+                 schema: tuple, bqClient: Client,
+                 job: _AsyncJob):
         """ """
-        super(BqDataLoadTableResource, self).__init__(table, defTime,
-                                                      bqClient)
+        super(BqDataLoadTableResource, self).__init__(table, bqClient)
         self.file = file
         self.table = table
         self.bqClient = bqClient
         self.schema = schema
-        self.defTime = defTime
         self.job = job
 
     def exists(self):
@@ -302,10 +286,6 @@ class BqDataLoadTableResource(BqTableBasedResource):
                 self.table.update()
             return int(createdTime.strftime("%s")) * 1000
         return None
-
-    def definitionTime(self):
-        """ Time in milliseconds """
-        return self.defTime
 
     def create(self):
         self.table.schema = self.schema
@@ -408,14 +388,14 @@ def processLoadTableOptions(options: dict, job: LoadTableFromStorageJob):
 class BqGcsTableLoadResource(BqTableBasedResource):
     # LoadTableFromStorageJob
     def __init__(self, table: Table,
-                 defTime: int, bqClient: Client,
+                 bqClient: Client,
                  gcsClient: storage.Client,
                  job: LoadTableFromStorageJob,
                  uris: tuple,
                  schema: tuple,
                  options: dict):
         super(BqGcsTableLoadResource, self)\
-            .__init__(table, defTime, bqClient)
+            .__init__(table, bqClient)
         self.job = job
         self.gcsClient = gcsClient,
         self.uris = uris
@@ -489,11 +469,10 @@ class BqGcsTableLoadResource(BqTableBasedResource):
 class BqQueryBasedResource(BqTableBasedResource):
     """ Base class of query based big query actions """
     def __init__(self, queries: list, table: Table,
-                 defTime: int, bqClient: Client):
+                 bqClient: Client):
         self.queries = queries
         self.table = table
         self.bqClient = bqClient
-        self.defTime = defTime
 
         if not isinstance(self.queries, list):
             raise Exception("queries must be of type list")
@@ -531,10 +510,6 @@ class BqQueryBasedResource(BqTableBasedResource):
                 self.table.update()
             return int(createdTime.strftime("%s")) * 1000
         return None
-
-    def definitionTime(self):
-        """ Time in milliseconds """
-        return self.defTime
 
     def create(self):
         raise Exception("implement")
@@ -580,10 +555,6 @@ class BqQueryBasedResource(BqTableBasedResource):
             print("updating because query hash is not in the description")
             return True
 
-        if self.defTime is not None and self.defTime > self.updateTime():
-            print("updating because ", self.defTime, self.updateTime())
-            return True
-
         return False
 
 
@@ -626,7 +597,7 @@ def strictSubstring(contained, container):
 
 class BqQueryBackedTableResource(BqQueryBasedResource):
     def __init__(self, queries: list, table: Table,
-                 defTime: int, bqClient: Client, queryJob: QueryJob):
+                 bqClient: Client, queryJob: QueryJob):
         super(BqQueryBackedTableResource, self)\
             .__init__(queries, table, None, bqClient)
         self.queryJob = queryJob
@@ -664,9 +635,9 @@ class BqQueryBackedTableResource(BqQueryBasedResource):
 
 class BqQueryBackedTableResource(BqQueryBasedResource):
     def __init__(self, query: str, table: Table,
-                 defTime: int, bqClient: Client, queryJob: QueryJob):
+                 bqClient: Client, queryJob: QueryJob):
         super(BqQueryBackedTableResource, self)\
-            .__init__(query, table, None, bqClient)
+            .__init__(query, table, bqClient)
         self.queryJob = queryJob
 
     def create(self):
@@ -737,7 +708,6 @@ def processExtractTableOptions(options: dict,
 class BqExtractTableResource(Resource):
     def __init__(self,
                  table: Table,
-                 defTime: int,
                  bqClient: Client,
                  gcsClient: storage.Client,
                  extractJob: ExtractTableToStorageJob,
@@ -745,7 +715,6 @@ class BqExtractTableResource(Resource):
                  options: dict):
 
         self.extractJob = extractJob
-        self.defTime = None
         self.table = table
         self.bqClient = bqClient
         self.gcsClient = gcsClient
@@ -789,10 +758,6 @@ class BqExtractTableResource(Resource):
     def dump(self):
         return ",".join(self.uris)
 
-    def definitionTime(self):
-        """ Time in milliseconds """
-        return self.defTime
-
     def parseBucketAndPrefix(self, uris):
         bucket = uris.replace("gs://", "").split("/")[0]
         prefix = "/".join(uris.replace("gs://", "").split("/")[:-2])
@@ -800,11 +765,12 @@ class BqExtractTableResource(Resource):
 
     def updateTime(self):
         objs = [int(o.updated.timestamp() * 1000) for o in
-                self.gcsClient.bucket(self.bucket).list_blobs(
-                prefix=self.pathPrefix)]
+                gcsUris(self.gcsClient, self.uris)]
 
         if len(objs) == 0:
-            return self.defTime
+            # basically i've never be extracted
+            print("returning 0")
+            return 0
 
         return max(objs)
 
@@ -861,9 +827,14 @@ def parseBucketAndPrefix(uris):
 
 
 def gcsExists(gcsClient, uris):
+    return len(gcsUris(gcsClient, uris)) > 0
+
+
+def gcsUris(gcsClient, uris):
     (bucket, prefix) = parseBucketAndPrefix(uris)
     prefix = prefix.replace("*.gz", "")
     bucket = gcsClient.get_bucket(bucket)
-    objs = [x for x in bucket.list_blobs(1, prefix=prefix,
+    objs = [x for x in bucket.list_blobs(prefix=prefix,
                                          delimiter="/")]
-    return len(objs) > 0
+
+    return objs
