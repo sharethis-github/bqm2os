@@ -18,6 +18,7 @@ import time
 from google.cloud.bigquery.table import Table
 import logging
 
+
 class Resource:
     def exists(self):
         raise Exception("Please implement")
@@ -251,15 +252,17 @@ class BqTableBasedResource(Resource):
         return ".".join([self.table.dataset_name,
                          self.table.name, "${query}"])
 
+
 def generate_file_md5(filename, blocksize=2**20):
     m = hashlib.md5()
-    with open(filename, "rb" ) as f:
+    with open(filename, "rb") as f:
         while True:
             buf = f.read(blocksize)
             if not buf:
                 break
-            m.update( buf )
+            m.update(buf)
     return m.hexdigest()
+
 
 class BqDataLoadTableResource(BqTableBasedResource):
     """ todo: currently we block during the creation of this
@@ -270,8 +273,8 @@ class BqDataLoadTableResource(BqTableBasedResource):
                  schema: tuple, defTime: int,
                  bqClient: Client, job: _AsyncJob):
         """ """
-        super(BqDataLoadTableResource, self).__init__(table, defTime
-                                                     , bqClient)
+        super(BqDataLoadTableResource, self).__init__(table, defTime,
+                                                      bqClient)
         self.file = file
         self.table = table
         self.bqClient = bqClient
@@ -354,6 +357,7 @@ class BqDataLoadTableResource(BqTableBasedResource):
         if not self.makeHashTag() in self.table.description:
             return True
         return False
+
 
 def processLoadTableOptions(options: dict, job: LoadTableFromStorageJob):
     """
@@ -511,17 +515,13 @@ class BqQueryBasedResource(BqTableBasedResource):
             finalQuery = self.makeFinalQuery()
             # hijack this step to update description - ugh - debt supreme
             if not self.table.description:
-                self.table.description = "\n".join(["This table/view "
-                                                     "was " +
-                                                    "created with the " +
-                                                    "following query",
-                                                    "", "/**",
-                                                    finalQuery, "*/",
-                                                    "Edits to this "
-                                                    "description will not "
-                                                    "be saved", "Do not "
-                                                                "edit", "",
-                                                    self.makeQueryHashTag()])
+
+                msg = ["This table/view was created with the " +
+                       "following query", "", "/**", finalQuery, "*/",
+                       "Edits to this description will not be saved",
+                       "Do not edit", "",
+                       self.makeQueryHashTag()]
+                self.table.description = "\n".join(msg)
                 self.table.update()
             return int(createdTime.strftime("%s")) * 1000
         return None
@@ -694,6 +694,7 @@ class BqQueryBackedTableResource(BqQueryBasedResource):
     def dump(self):
         return self.makeFinalQuery()
 
+
 def processExtractTableOptions(options: dict,
                                job: ExtractTableToStorageJob):
     compressions = {
@@ -808,7 +809,6 @@ class BqExtractTableResource(Resource):
             return False
 
         return self.updateTime() < int(createdTime.strftime("%s")) * 1000
-
 
 
 def wait_for_job(job: QueryJob):
