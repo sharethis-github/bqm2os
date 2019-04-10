@@ -452,22 +452,28 @@ class BqGcsTableLoadResource(BqTableBasedResource):
         return len(me.intersection(them)) > 0
 
     def updateTime(self):
-        objs = [int(o.updated.timestamp() * 1000) for o in
-                self.gcsClient.bucket(self.bucket).list_blobs(
-                prefix=self.pathPrefix)]
+        objs = []
+        for uri in self.uris:
+            bucket, prefix = parseBucketAndPrefix(uri)
+            staridx = prefix.index(prefix, "*")
+            if staridx != -1:
+                prefix = prefix[:staridx]
 
-        if len(objs) == 0:
-            return self.defTime
+            files = [int(o.updated.timestamp() * 1000) for o in
+                    self.gcsClient.bucket(bucket).list_blobs(
+                    prefix=prefix)]
+            objs.append(files)
+
+
+        if not len(objs):
+            self.table.reload()
+            createdTime = self.table.modified
+            return int(createdTime.strftime("%s")) * 1000
 
         return max(objs)
 
     def shouldUpdate(self):
-        self.table.reload()
-        createdTime = self.table.modified
-        if not createdTime:
-            return False
-
-        return self.updateTime() > int(createdTime.strftime("%s")) * 1000
+        return False
 
     def key(self):
         return ".".join([self.table.dataset_name,
