@@ -33,7 +33,6 @@ class Resource:
         raise Exception("Please implement")
 
     def shouldUpdate(self):
-        print("I am a ", self)
         raise Exception("Please implement")
 
     def key(self):
