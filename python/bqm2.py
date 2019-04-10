@@ -161,8 +161,14 @@ class DependencyExecutor:
                     running.add(n)
                 elif self.resources[n].shouldUpdate():
                     self.handleRetries(retries, n)
-                    print("executing: because its definition is newer "
-                          "than last created ",
+                    print("executing: because our definition has changed",
+                          n, self.resources[n])
+                    self.resources[n].create()
+                    running.add(n)
+                elif self.resources[n].updateTime() < depUpdateTimes[n]:
+                    self.handleRetries(retries, n)
+                    print("executing: because our dependencies have "
+                          "changed since we last ran",
                           n, self.resources[n])
                     self.resources[n].create()
                     running.add(n)
