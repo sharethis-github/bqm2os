@@ -136,6 +136,11 @@ class DependencyExecutor:
     def execute(self, checkFrequency=10, maxConcurrent=10):
         running = set([])
         retries = defaultdict(lambda: self.maxRetry)
+
+        # def update times is a dict of maximum of the update
+        # times of the dependencies of a resource
+
+        depUpdateTimes = defaultdict(lambda: 0)
         while len(self.dependencies):
             todel = set([])
             for n in sorted(self.dependencies.keys()):
@@ -154,12 +159,16 @@ class DependencyExecutor:
                     print("executing: because it doesn't exist ", n)
                     self.resources[n].create()
                     running.add(n)
-
-                elif self.resources[n].definitionTime() \
-                        > self.resources[n].updateTime():
+                elif self.resources[n].shouldUpdate():
                     self.handleRetries(retries, n)
-                    print("executing: because its definition is newer "
-                          "than last created ",
+                    print("executing: because our definition has changed",
+                          n, self.resources[n])
+                    self.resources[n].create()
+                    running.add(n)
+                elif self.resources[n].updateTime() < depUpdateTimes[n]:
+                    self.handleRetries(retries, n)
+                    print("executing: because our dependencies have "
+                          "changed since we last ran",
                           n, self.resources[n])
                     self.resources[n].create()
                     running.add(n)
@@ -174,6 +183,7 @@ class DependencyExecutor:
                     print("max concurrent running already")
                     break
 
+            # n-squared
             for n in sorted(self.dependencies.keys()):
                 torm = set([])
                 for k in self.dependencies[n]:
@@ -181,8 +191,7 @@ class DependencyExecutor:
                         continue
                     if k not in self.dependencies:
                         kDateTime = self.resources[k].updateTime()
-                        if kDateTime > self.resources[n].definitionTime():
-                            self.resources[n].defTime = kDateTime
+                        depUpdateTimes[n] = max(depUpdateTimes[n], kDateTime)
                         torm.add(k)
 
                 self.dependencies[n] = self.dependencies[n] - torm
@@ -279,7 +288,8 @@ if __name__ == "__main__":
                                              kwargs),
             localdata=BqDataFileLoader(loadClient,
                                        kwargs['dataset'],
-                                       kwargs['project']),
+                                       kwargs['project'],
+                                       bqJobs),
             gcsdata=BqQueryTemplatingFileLoader(client, gcsClient,
                                                 bqJobs,
                                                 TableType.TABLE_GCS_LOAD,
