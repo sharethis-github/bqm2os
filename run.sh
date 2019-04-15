@@ -14,12 +14,19 @@ if [ -z $SRC_DIR ]; then
 fi
 echo "SRC: $SRC_DIR"
 
+if [[ ! -f ~/.aws/mfa ]]
+then
+    echo Please make you have a valid mfa credentials file
+    exit 1
+fi
 
 # get creds
 mkdir -p /tmp/creds
-docker run -ti -v ~/.aws/mfa:/root/.aws/credentials -v /tmp/creds:/tmp/creds -e AWS_DEFAULT_REGION=us-east-1 docker.io/stops/secrets-manager-v2:5b20bdefaa python /src/client.py k8app__bq-third-party__staging__bqm2-json__gcloud-private-key /tmp/creds/gcloud-private-key
+
+docker run -ti -v ~/.aws:/root/.aws -v /tmp/creds:/tmp/creds -e AWS_SHARED_CREDENTIALS_FILE=/root/.aws/mfa -e AWS_DEFAULT_REGION=us-east-1 docker.io/stops/secrets-manager-v2:5b20bdefaa python /src/client.py k8app__bq-third-party__staging__bqm2-json__gcloud-private-key /tmp/creds/gcloud-private-key
 
 docker run -e GOOGLE_APPLICATION_CREDENTIALS=/gcloud-private-key \
+-e AWS_SHARED_CREDENTIALS_FILE=/root/.aws/mfa \
 -v $SRC_DIR/config/templates/secrets/taxonomy-run:/mnt/run \
 -v $SRC_DIR/dynamic-data-config/endpoints:/endpoints \
 -v $SRC_DIR/dynamic-data-config/bigquery:/bigquery \
