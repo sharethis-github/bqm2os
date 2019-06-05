@@ -108,7 +108,7 @@ def cacheDataSet(bqClient: Client, bqTable: Table, datasets: dict):
     """
     dsetKey = _buildDataSetKey_(bqTable)
     if dsetKey not in datasets:
-        dataset = bqClient.dataset(bqTable.dataset_name, bqTable.project)
+        dataset = bqClient.dataset(bqTable.dataset_id, bqTable.project)
         datasets[dsetKey] = BqDatasetBackedResource(dataset, bqClient)
     return datasets[dsetKey]
 
@@ -268,8 +268,13 @@ class BqQueryTemplatingFileLoader(FileLoader):
             uris = tuple([uri for uri in query.split("\n") if
                           uri.startswith("gs://")])
 
-            with open(filePath + ".schema") as schemaFile:
-                schema = loadSchemaFromString(schemaFile.read().strip())
+            schema = ()
+            if "source_format" in templateVars and \
+                    templateVars["source_format"] == "PARQUET":
+                schema = None
+            else:
+                with open(filePath + ".schema") as schemaFile:
+                    schema = loadSchemaFromString(schemaFile.read().strip())
 
             rsrc = BqGcsTableLoadResource(bqTable,
                                           self.bqClient,
@@ -303,7 +308,8 @@ class BqQueryTemplatingFileLoader(FileLoader):
                                         self.datasets)
 
         if prev and prev != out[key] and \
-                self.tableType != TableType.UNION_TABLE:
+                self.tableType not in set([TableType.UNION_TABLE,
+                                          TableType.UNION_VIEW]):
             raise Exception("Templating generated duplicate "
                             "tables outputs for " + filePath)
 

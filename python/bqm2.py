@@ -9,6 +9,8 @@ import re
 from time import sleep
 
 from collections import defaultdict
+
+import sys
 from google.cloud import storage
 from google.cloud.bigquery.client import Client
 
@@ -257,6 +259,7 @@ if __name__ == "__main__":
 
     client = Client()
     if options.defaultProject:
+        client = Client(options.defaultProject)
         kwargs["project"] = options.defaultProject
     else:
         kwargs["project"] = client.project

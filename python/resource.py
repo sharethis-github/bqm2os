@@ -6,17 +6,19 @@ from enum import Enum
 import hashlib
 from json.decoder import JSONDecodeError
 
-from google.api.core.exceptions import NotFound
 from google.cloud import storage
+from google.cloud import bigquery
 from google.cloud.bigquery.client import Client
-from google.cloud.bigquery.dataset import Dataset
+from google.cloud.bigquery.dataset import Dataset, DatasetReference
 from google.cloud.bigquery.job import WriteDisposition, \
     QueryPriority, QueryJob, SourceFormat, \
-    ExtractTableToStorageJob, Compression, \
-    DestinationFormat, LoadTableFromStorageJob, _AsyncJob
+    Compression, DestinationFormat, _AsyncJob, LoadJob, ExtractJob, \
+    LoadJobConfig
 import time
-from google.cloud.bigquery.table import Table
+from google.cloud.bigquery.table import Table, TableReference
 import logging
+
+from google.cloud.exceptions import NotFound
 
 
 class Resource:
@@ -97,15 +99,15 @@ def _buildDataSetKey_(table: Table) -> str:
     :param table: a bq table
     :return: colon concatenated project, dataset
     """
-    return ":".join([table.dataset_name])
+    return ":".join([table.dataset_id])
 
 
-def _buildDataSetTableKey_(table: Table) -> str:
+def _buildDataSetTableKey_(table: TableReference) -> str:
     """
     :param table:
     :return: colon concatenated project,  dataset, tablename
     """
-    return ":".join([_buildDataSetKey_(table), table.name])
+    return ":".join([_buildDataSetKey_(table), table.table_id])
 
 
 class BqTables:
@@ -128,12 +130,12 @@ class BqTables:
         key = self.__dsetkey_(table)
         if key in self.datasetTableMap:
             dsetMap = self.datasetTableMap[key]
-            if table.name in dsetMap:
-                return dsetMap[table.name]
+            if table.table_id in dsetMap:
+                return dsetMap[table.table_id]
             else:
                 return None
         else:  # load dataset
-            iter = self.bqClient.dataset(table.dataset_name).list_tables()
+            iter = self.bqClient.dataset(table.dataset_id).list_tables()
             dsetMap = {}
             self.datasetTableMap[key] = dsetMap
             while True:
@@ -152,16 +154,19 @@ class BqDatasetBackedResource(Resource):
      todo: maybe helpful to allow users to specify attributes
      of the dataset such as ttl of tables exist
     """
-    def __init__(self, dataset: Dataset,
+    def __init__(self, dataset: DatasetReference,
                  bqClient: Client):
-        self.dataset = dataset
         self.bqClient = bqClient
-        self.existFlag = self.dataset.exists()
-        if self.existFlag:
-            self.dataset.reload()
+        self.existFlag = False
+        self.dataset = None
+        try:
+            self.dataset = bqClient.get_dataset(dataset)
+            self.existFlag = True
+        except NotFound:
+            pass
 
     def exists(self):
-        return self.dataset.exists()
+        return self.dataset is not None
 
     def updateTime(self):
         """ time in milliseconds.  None if not created """
@@ -174,7 +179,7 @@ class BqDatasetBackedResource(Resource):
         self.dataset.create()
 
     def key(self):
-        return self.dataset.name
+        return self.dataset.dataset_id
 
     def dependsOn(self, resource):
         return False
@@ -186,7 +191,7 @@ class BqDatasetBackedResource(Resource):
         return False
 
     def __str__(self):
-        return ":".join([self.dataset.project, self.dataset.name])
+        return ":".join([self.dataset.project, self.dataset.dataset_id])
 
     def __eq__(self, other):
         try:
@@ -209,7 +214,11 @@ class BqTableBasedResource(Resource):
         self.bqClient = bqClient
 
     def exists(self):
-        return self.table.exists()
+        try:
+            self.bqClient.get_table(self.table)
+            return True
+        except NotFound:
+            return False
 
     def updateTime(self):
         """ time in milliseconds.  None if not created """
@@ -294,6 +303,7 @@ class BqDataLoadTableResource(BqTableBasedResource):
         with open(self.file, 'r') as readable:
             srcFormat = BqDataLoadTableResource.detectSourceFormat(
                                                 readable.readline())
+
             if srcFormat != SourceFormat.CSV:
                 fieldDelimiter = None
 
@@ -338,7 +348,7 @@ class BqDataLoadTableResource(BqTableBasedResource):
         return False
 
 
-def processLoadTableOptions(options: dict, job: LoadTableFromStorageJob):
+def processLoadTableOptions(options: dict, job: LoadJob):
     """
     :param options: A dictionary of options matching fields available
      on LoadTableFromStorageJob
@@ -349,7 +359,8 @@ def processLoadTableOptions(options: dict, job: LoadTableFromStorageJob):
         "AVRO": SourceFormat.AVRO,
         "NEWLINE_DELIMITED_JSON": SourceFormat.NEWLINE_DELIMITED_JSON,
         "CSV": SourceFormat.CSV,
-        "DATASTORE_BACKUP": SourceFormat.DATASTORE_BACKUP
+        "DATASTORE_BACKUP": SourceFormat.DATASTORE_BACKUP,
+        "PARQUET": bigquery.SourceFormat.PARQUET
     }
 
     if "source_format" in options:
@@ -390,7 +401,7 @@ class BqGcsTableLoadResource(BqTableBasedResource):
     def __init__(self, table: Table,
                  bqClient: Client,
                  gcsClient: storage.Client,
-                 job: LoadTableFromStorageJob,
+                 job: LoadJob,
                  uris: tuple,
                  schema: tuple,
                  options: dict):
@@ -406,17 +417,16 @@ class BqGcsTableLoadResource(BqTableBasedResource):
         return isJobRunning(self.job)
 
     def create(self):
-        jobid = "-".join(["create", self.table.dataset_name,
-                          self.table.name, str(uuid.uuid4())])
-        self.job = LoadTableFromStorageJob(jobid, self.table,
-                                           self.uris,
-                                           self.bqClient,
-                                           self.schema)
-        self.job.source_format = DestinationFormat.NEWLINE_DELIMITED_JSON
-        self.job.ignore_unknown_values = True
-        self.job.max_bad_records = 1000
-        self.job.write_disposition = WriteDisposition.WRITE_TRUNCATE
-        processLoadTableOptions(self.options, self.job)
+        jobid = "-".join(["create", self.table.dataset_id,
+                          self.table.table_id, str(uuid.uuid4())])
+        self.job = LoadJob(jobid, self.table, self.uris,
+                           self.bqClient, self.schema)
+        job_config = LoadJobConfig()
+        job_config.source_format = DestinationFormat.NEWLINE_DELIMITED_JSON
+        job_config.ignore_unknown_values = True
+        job_config.max_bad_records = 1000
+        job_config.write_disposition = WriteDisposition.WRITE_TRUNCATE
+        processLoadTableOptions(self.options, self.job_config)
         self.job.begin()
 
     def dependsOn(self, other: Resource):
@@ -456,8 +466,8 @@ class BqGcsTableLoadResource(BqTableBasedResource):
         return False
 
     def key(self):
-        return ".".join([self.table.dataset_name,
-                         self.table.name])
+        return ".".join([self.table.dataset_id,
+                         self.table.table_id])
 
     def __eq__(self, other):
         try:
@@ -657,7 +667,7 @@ class BqQueryBackedTableResource(BqQueryBasedResource):
         self.queryJob = query_job
 
     def key(self):
-        return ".".join([self.table.dataset_name, self.table.name])
+        return ".".join([self.table.dataset_id, self.table.table_id])
 
     def isRunning(self):
         if self.queryJob:
@@ -673,7 +683,7 @@ class BqQueryBackedTableResource(BqQueryBasedResource):
 
 
 def processExtractTableOptions(options: dict,
-                               job: ExtractTableToStorageJob):
+                               job: ExtractJob):
     compressions = {
         "GZIP": Compression.GZIP,
         "NONE": Compression.NONE,
@@ -710,7 +720,7 @@ class BqExtractTableResource(Resource):
                  table: Table,
                  bqClient: Client,
                  gcsClient: storage.Client,
-                 extractJob: ExtractTableToStorageJob,
+                 extractJob: ExtractJob,
                  uris: str,
                  options: dict):
 

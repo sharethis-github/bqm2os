@@ -3,7 +3,7 @@ from unittest import TestCase
 from unittest.mock import Mock
 
 import mock
-from google.api.core.page_iterator import Iterator
+from google.api_core.page_iterator import Iterator
 from google.cloud.bigquery.client import Client
 from google.cloud.bigquery.dataset import Dataset
 from google.cloud.bigquery.job import QueryJob, SourceFormat, \
@@ -19,8 +19,8 @@ from resource import strictSubstring, Resource, \
 
 class Test(unittest.TestCase):
     def test_getFiltered(self):
-        self.assertTrue(getFiltered(".") == ".")
-        self.assertTrue(getFiltered("@") == " ")
+        self.assertTrue(resource.getFiltered(".") == ".")
+        self.assertTrue(resource.getFiltered("@") == " ")
 
     def test_strictSubstring(self):
         self.assertTrue(strictSubstring("A", "AA"))
@@ -152,7 +152,7 @@ group each by id, description, url
     @mock.patch('google.cloud.bigquery.table.Table')
     def test_buildDataSetKey_(self, table):
         table.project = 'p'
-        table.dataset_name = 'd'
+        table.dataset_id = 'd'
         actual = resource._buildDataSetKey_(table)
         expected = 'p:d'
         self.assertEqual(actual, expected)
@@ -160,8 +160,8 @@ group each by id, description, url
     @mock.patch('google.cloud.bigquery.table.Table')
     def test_buildTableKey_(self, table: Table):
         table.project = 'p'
-        table.dataset_name = 'd'
-        table.name = 't'
+        table.dataset_id = 'd'
+        table.friendly_name = 't'
         actual = resource._buildDataSetTableKey_(table)
         expected = 'p:d:t'
         self.assertEqual(actual, expected)
@@ -176,8 +176,8 @@ group each by id, description, url
         it.next_page_token = None
 
         job.destination = table
-        table.dataset_name = "d"
-        table.name = "t"
+        table.dataset_id = "d"
+        table.friendly_name = "t"
         table.project = "p"
 
         jobs = BqJobs(client, {})
@@ -195,8 +195,8 @@ group each by id, description, url
                                       job: QueryJob, table: Table):
 
         job.destination = table
-        table.dataset_name = "d"
-        table.name = "t"
+        table.dataset_id = "d"
+        table.friendly_name = "t"
         table.project = "p"
 
         jobs = BqJobs(client, {})
