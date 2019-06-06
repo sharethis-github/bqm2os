@@ -7,6 +7,7 @@ from google.cloud.bigquery.table import Table
 from os.path import getmtime
 from enum import Enum
 from google.cloud import storage
+from google.cloud.exceptions import NotFound
 
 import tmplhelper
 from resource import Resource, _buildDataSetKey_, BqDatasetBackedResource, \
@@ -108,7 +109,11 @@ def cacheDataSet(bqClient: Client, bqTable: Table, datasets: dict):
     """
     dsetKey = _buildDataSetKey_(bqTable)
     if dsetKey not in datasets:
-        dataset = bqClient.dataset(bqTable.dataset_id, bqTable.project)
+        #dataset = bqClient.dataset(bqTable.dataset_id, bqTable.project)
+        try:
+           dataset =  bqClient.get_dataset(bqTable.dataset_id)
+        except NotFound:
+            dataset = bqClient.create_dataset(bqTable.dataset_id)
         datasets[dsetKey] = BqDatasetBackedResource(dataset, bqClient)
     return datasets[dsetKey]
 
