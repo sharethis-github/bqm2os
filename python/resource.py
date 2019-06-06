@@ -621,42 +621,42 @@ def strictSubstring(contained, container):
     return contained in container and len(contained) < len(container)
 
 
-class BqQueryBackedTableResource(BqQueryBasedResource):
-    def __init__(self, queries: list, table: Table,
-                 bqClient: Client, queryJob: QueryJob):
-        super(BqQueryBackedTableResource, self)\
-            .__init__(queries, table, None, bqClient)
-        self.queryJob = queryJob
-
-    def create(self):
-        if self.table.exists():
-            self.table.delete()
-
-        jobid = "-".join(["create", self.table.dataset_id,
-                          self.table.table_id, str(uuid.uuid4())])
-        query_job = self.bqClient.run_async_query(jobid, self.makeFinalQuery())
-
-        # TODO: this should probably all be options
-        query_job.allow_large_results = True
-        query_job.flatten_results = False
-        query_job.destination = self.table
-        query_job.priority = QueryPriority.INTERACTIVE
-        query_job.write_disposition = WriteDisposition.WRITE_TRUNCATE
-        query_job.maximum_billing_tier = 2
-        query_job.begin()
-        self.queryJob = query_job
-
-    def isRunning(self):
-        if self.queryJob:
-            self.queryJob.reload()
-            print(self.queryJob.job_id,
-                  self.queryJob.state, self.queryJob.errors)
-            return self.queryJob.state in ['RUNNING', 'PENDING']
-        else:
-            return False
-
-    def dump(self):
-        return self.makeFinalQuery()
+#class BqQueryBackedTableResource(BqQueryBasedResource):
+#    def __init__(self, queries: list, table: Table,
+#                 bqClient: Client, queryJob: QueryJob):
+#        super(BqQueryBackedTableResource, self)\
+#            .__init__(queries, table, None, bqClient)
+#        self.queryJob = queryJob
+#
+#    def create(self):
+#        if self.table.exists():
+#            self.table.delete()
+#
+#        jobid = "-".join(["create", self.table.dataset_id,
+#                          self.table.table_id, str(uuid.uuid4())])
+#        query_job = self.bqClient.run_async_query(jobid, self.makeFinalQuery())
+#
+#        # TODO: this should probably all be options
+#        query_job.allow_large_results = True
+#        query_job.flatten_results = False
+#        query_job.destination = self.table
+#        query_job.priority = QueryPriority.INTERACTIVE
+#        query_job.write_disposition = WriteDisposition.WRITE_TRUNCATE
+#        query_job.maximum_billing_tier = 2
+#        query_job.begin()
+#        self.queryJob = query_job
+#
+#    def isRunning(self):
+#        if self.queryJob:
+#            self.queryJob.reload()
+#            print(self.queryJob.job_id,
+#                  self.queryJob.state, self.queryJob.errors)
+#            return self.queryJob.state in ['RUNNING', 'PENDING']
+#        else:
+#            return False
+#
+#    def dump(self):
+#        return self.makeFinalQuery()
 
 
 class BqQueryBackedTableResource(BqQueryBasedResource):
@@ -688,9 +688,11 @@ class BqQueryBackedTableResource(BqQueryBasedResource):
         #query_job.begin()
         query_job = self.bqClient.query(
             self.makeFinalQuery(),
-            location="US",
+            location="US"
         )
-        self.queryJob = query_job
+        self.queryJob = self.bqClient.get_job(
+                        query_job.job_id, location='US'
+                        )
 
     def key(self):
         return ".".join([self.table.dataset_id, self.table.table_id])
