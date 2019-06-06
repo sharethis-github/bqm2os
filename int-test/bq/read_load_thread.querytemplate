@@ -1,1 +1,1 @@
-select * from [{project}:{dataset}.load_three]
+select * from `{project}.{dataset}.load_three`
