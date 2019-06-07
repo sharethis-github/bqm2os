@@ -1,1 +1,3 @@
-select * from `{project}.{dataset}.load_three`
+#legacySql
+
+select * from [{project}:{dataset}.load_three]

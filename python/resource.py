@@ -176,7 +176,6 @@ class BqDatasetBackedResource(Resource):
 
     def create(self):
         self.dataset = self.bqClient.create_dataset(self.datasetReference)
-        #self.dataset.create()
 
     def key(self):
         return self.dataset.dataset_id
@@ -222,9 +221,7 @@ class BqTableBasedResource(Resource):
 
     def updateTime(self):
         """ time in milliseconds.  None if not created """
-        #self.table.reload()
         self.table = self.bqClient.get_table(self.table)
-
         createdTime = self.table.modified
 
         if createdTime:
@@ -282,7 +279,6 @@ class BqDataLoadTableResource(BqTableBasedResource):
             return True
         except NotFound:
             return False
-        #return self.table.exists()
 
     def makeHashTag(self):
         schemahash = generate_file_md5(self.file + ".schema")
@@ -290,7 +286,6 @@ class BqDataLoadTableResource(BqTableBasedResource):
 
     def updateTime(self):
         """ time in milliseconds.  None if not created """
-        #self.table.reload()
         self.table = self.bqClient.get_table(self.table)
         createdTime = self.table.modified
 
@@ -301,7 +296,6 @@ class BqDataLoadTableResource(BqTableBasedResource):
             if not self.table.description:
                 self.table.description = "\n".join(["Do not edit", hashtag])
                 self.bqClient.update_table(self.table, ["description"])
-                #self.table.update()
             return int(createdTime.strftime("%s")) * 1000
         return None
 
@@ -323,15 +317,12 @@ class BqDataLoadTableResource(BqTableBasedResource):
         job_config.autodetect = True
 
         with open(self.file, 'rb') as readable:
-            job  = self.bqClient.load_table_from_file(
-                readable, 
+            job = self.bqClient.load_table_from_file(
+                readable,
                 self.table,
                 job_config=job_config
                 )
         self.job = job
-
-        # waits for job to complete
-        #self.job.result()
 
     def key(self):
         return ".".join([self.table.dataset_id, self.table.table_id])
@@ -403,7 +394,8 @@ def processLoadTableOptions(options: dict):
         job_config.max_bad_records = int(options['max_bad_records'])
 
     if 'ignore_unknown_values' in options:
-        job_config.ignore_unknown_values = bool(options['ignore_unknown_values'])
+        job_config.ignore_unknown_values = \
+                bool(options['ignore_unknown_values'])
 
     write_disp = {
         "WRITE_APPEND": WriteDisposition.WRITE_APPEND,
@@ -450,14 +442,11 @@ class BqGcsTableLoadResource(BqTableBasedResource):
         jobid = "-".join(["create", self.table.dataset_id,
                           self.table.table_id, str(uuid.uuid4())])
         self.job = self.bqClient.load_table_from_uri(
-                self.uris, 
-                self.table, 
+                self.uris,
+                self.table,
                 jobid,
                 job_config=processLoadTableOptions(self.options)
                 )
-
-        # wait for the job to complete    
-        #self.job.result()
 
     def dependsOn(self, other: Resource):
         if self == other:
@@ -532,7 +521,6 @@ class BqQueryBasedResource(BqTableBasedResource):
 
     def updateTime(self):
         """ time in milliseconds.  None if not created """
-        #self.table.reload()
         self.table = self.bqClient.get_table(self.table)
 
         createdTime = self.table.modified
@@ -549,8 +537,10 @@ class BqQueryBasedResource(BqTableBasedResource):
                        "Do not edit", "",
                        self.makeQueryHashTag()]
                 self.table.description = "\n".join(msg)
-                self.table = self.bqClient.update_table(self.table, ["description"])
-                #self.table.update()
+                self.table = self.bqClient.update_table(
+                        self.table,
+                        ["description"]
+                        )
             return int(createdTime.strftime("%s")) * 1000
         return None
 
@@ -609,7 +599,7 @@ class BqViewBackedTableResource(BqQueryBasedResource):
             return True
         except NotFound:
             return False
- 
+
     def create(self):
         try:
             if (self.tableExists()):
@@ -622,7 +612,6 @@ class BqViewBackedTableResource(BqQueryBasedResource):
             self.table.view_query = self.makeFinalQuery()
             self.table.schema = []
             self.table = self.bqClient.create_table(self.table)
-            #self.table.create()
         except NotFound:
             # fail loading - exists will fail
             # and we'll retry and after
@@ -660,10 +649,10 @@ class BqQueryBackedTableResource(BqQueryBasedResource):
             return True
         except NotFound:
             return False
+
     def create(self):
         if self.tableExists():
             self.table.delete()
-
         jobid = "-".join(["create", self.table.dataset_id,
                           self.table.table_id, str(uuid.uuid4())])
         job_config = bigquery.QueryJobConfig()
@@ -747,8 +736,8 @@ class BqExtractTableResource(Resource):
         jobid = "-".join(["extract", self.table.table_id,
                           self.table.table_id, str(uuid.uuid4())])
         self.extractJob = self.bqClient.extract_table(
-                self.table, 
-                self.uris, 
+                self.table,
+                self.uris,
                 jobid,
                 job_config=processExtractTableOptions(self.options)
                 )
@@ -790,7 +779,6 @@ class BqExtractTableResource(Resource):
         return max(objs)
 
     def shouldUpdate(self):
-        #self.table.reload()
         self.table = self.bqClient.get_table(self.table)
         createdTime = self.table.modified
         if not createdTime:
@@ -819,7 +807,6 @@ def export_data_to_gcs(dataset_name, table_name, destination):
     job = bigquery_client.extract_table_to_storage(
         job_name, table, destination)
 
-    #job.begin()
     job.result()  # Wait for job to complete
 
     print('Exported {}:{} to {}'.format(
@@ -828,10 +815,11 @@ def export_data_to_gcs(dataset_name, table_name, destination):
 
 def isJobRunning(job):
     if not job:
-       return False
+        return False
     job.reload()
     print(job.job_id, job.state, job.errors)
     return job.running()
+
 
 def parseBucketAndPrefix(uris):
     bucket = uris.replace("gs://", "").split("/")[0]

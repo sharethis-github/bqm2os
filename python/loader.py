@@ -109,9 +109,8 @@ def cacheDataSet(bqClient: Client, bqTable: Table, datasets: dict):
     """
     dsetKey = _buildDataSetKey_(bqTable)
     if dsetKey not in datasets:
-        #dataset = bqClient.dataset(bqTable.dataset_id, bqTable.project)
         try:
-           dataset =  bqClient.get_dataset(bqTable.dataset_id)
+            dataset = bqClient.get_dataset(bqTable.dataset_id)
         except NotFound:
             dataset = bqClient.create_dataset(bqTable.dataset_id)
         datasets[dsetKey] = BqDatasetBackedResource(dataset, bqClient)
@@ -276,7 +275,7 @@ class BqQueryTemplatingFileLoader(FileLoader):
             schema = None
             if "source_format" not in templateVars:
                 raise Exception("source_format not found in template vars")
-        
+
             if templateVars["source_format"] != "PARQUET":
                 with open(filePath + ".schema") as schemaFile:
                     schema = loadSchemaFromString(schemaFile.read().strip())
