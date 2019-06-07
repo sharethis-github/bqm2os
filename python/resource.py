@@ -12,8 +12,7 @@ from google.cloud.bigquery.client import Client
 from google.cloud.bigquery.dataset import Dataset, DatasetReference
 from google.cloud.bigquery.job import WriteDisposition, \
     QueryPriority, QueryJob, SourceFormat, \
-    Compression, DestinationFormat, _AsyncJob, LoadJob, ExtractJob, \
-    LoadJobConfig, QueryJobConfig, ExtractJobConfig
+    Compression, DestinationFormat, _AsyncJob, LoadJob, ExtractJob
 import time
 from google.cloud.bigquery.table import Table, TableReference
 import logging
@@ -327,11 +326,12 @@ class BqDataLoadTableResource(BqTableBasedResource):
             job  = self.bqClient.load_table_from_file(
                 readable, 
                 self.table,
-                location="US",
                 job_config=job_config
                 )
-        job.result()
         self.job = job
+
+        # waits for job to complete
+        #self.job.result()
 
     def key(self):
         return ".".join([self.table.dataset_id, self.table.table_id])
@@ -340,8 +340,7 @@ class BqDataLoadTableResource(BqTableBasedResource):
         return self.table.dataset_id == resource.key()
 
     def isRunning(self):
-        print("BqDataLoadTableResource")
-        return isJobRunning(self.job, self.bqClient)
+        return isJobRunning(self.job)
 
     def __str__(self):
         return "localdata:" + ".".join([self.table.dataset_id,
@@ -367,13 +366,22 @@ class BqDataLoadTableResource(BqTableBasedResource):
         return False
 
 
-def processLoadTableOptions(options: dict, job_config: LoadJobConfig):
+def processLoadTableOptions(options: dict):
     """
     :param options: A dictionary of options matching fields available
      on LoadTableFromStorageJob
     :param job: An instance of LoadTableFromStorageJob
     :return: None - simply decorates the job
     """
+    print(options)
+    job_config = bigquery.LoadJobConfig()
+    job_config.source_format = DestinationFormat.NEWLINE_DELIMITED_JSON
+    job_config.ignore_unknown_values = True
+    job_config.write_disposition = WriteDisposition.WRITE_TRUNCATE
+
+    if "schema" in options:
+        job_config.schema = options["schema"]
+
     formats = {
         "AVRO": SourceFormat.AVRO,
         "NEWLINE_DELIMITED_JSON": SourceFormat.NEWLINE_DELIMITED_JSON,
@@ -387,6 +395,8 @@ def processLoadTableOptions(options: dict, job_config: LoadJobConfig):
         if value not in formats:
             raise KeyError("Please use only one of the following: "
                            + ",".join(formats.keys()))
+        if value != "PARQUET":
+            job_config.max_bad_records = 1000
         job_config.source_format = formats[value]
 
     if "max_bad_records" in options:
@@ -413,6 +423,7 @@ def processLoadTableOptions(options: dict, job_config: LoadJobConfig):
 
     if 'skip_leading_rows' in options:
         job_config.skip_leading_rows = int(options["skip_leading_rows"])
+    return job_config
 
 
 class BqGcsTableLoadResource(BqTableBasedResource):
@@ -433,22 +444,20 @@ class BqGcsTableLoadResource(BqTableBasedResource):
         self.options = options
 
     def isRunning(self):
-        print("BqGcsTableLoadResource")
-        return isJobRunning(self.job, self.bqClient)
+        return isJobRunning(self.job)
 
     def create(self):
         jobid = "-".join(["create", self.table.dataset_id,
                           self.table.table_id, str(uuid.uuid4())])
-        job_config = LoadJobConfig()
-        job_config.source_format = DestinationFormat.NEWLINE_DELIMITED_JSON
-        job_config.ignore_unknown_values = True
-        job_config.max_bad_records = 1000
-        job_config.write_disposition = WriteDisposition.WRITE_TRUNCATE
-        job_config.schema = self.schema
-        processLoadTableOptions(self.options, job_config)
-        self.job = LoadJob(jobid, self.uris, self.table, self.bqClient, job_config=job_config)
- 
-        self.job.result()
+        self.job = self.bqClient.load_table_from_uri(
+                self.uris, 
+                self.table, 
+                jobid,
+                job_config=processLoadTableOptions(self.options)
+                )
+
+        # wait for the job to complete    
+        #self.job.result()
 
     def dependsOn(self, other: Resource):
         if self == other:
@@ -638,44 +647,6 @@ def strictSubstring(contained, container):
     return contained in container and len(contained) < len(container)
 
 
-#class BqQueryBackedTableResource(BqQueryBasedResource):
-#    def __init__(self, queries: list, table: Table,
-#                 bqClient: Client, queryJob: QueryJob):
-#        super(BqQueryBackedTableResource, self)\
-#            .__init__(queries, table, None, bqClient)
-#        self.queryJob = queryJob
-#
-#    def create(self):
-#        if self.table.exists():
-#            self.table.delete()
-#
-#        jobid = "-".join(["create", self.table.dataset_id,
-#                          self.table.table_id, str(uuid.uuid4())])
-#        query_job = self.bqClient.run_async_query(jobid, self.makeFinalQuery())
-#
-#        # TODO: this should probably all be options
-#        query_job.allow_large_results = True
-#        query_job.flatten_results = False
-#        query_job.destination = self.table
-#        query_job.priority = QueryPriority.INTERACTIVE
-#        query_job.write_disposition = WriteDisposition.WRITE_TRUNCATE
-#        query_job.maximum_billing_tier = 2
-#        query_job.begin()
-#        self.queryJob = query_job
-#
-#    def isRunning(self):
-#        if self.queryJob:
-#            self.queryJob.reload()
-#            print(self.queryJob.job_id,
-#                  self.queryJob.state, self.queryJob.errors)
-#            return self.queryJob.state in ['RUNNING', 'PENDING']
-#        else:
-#            return False
-#
-#    def dump(self):
-#        return self.makeFinalQuery()
-
-
 class BqQueryBackedTableResource(BqQueryBasedResource):
     def __init__(self, query: str, table: Table,
                  bqClient: Client, queryJob: QueryJob):
@@ -695,14 +666,6 @@ class BqQueryBackedTableResource(BqQueryBasedResource):
 
         jobid = "-".join(["create", self.table.dataset_id,
                           self.table.table_id, str(uuid.uuid4())])
-        #query_job = self.bqClient.run_async_query(jobid, self.makeFinalQuery())
-        #query_job.allow_large_results = True
-        #query_job.flatten_results = False
-        #query_job.destination = self.table
-        #query_job.priority = QueryPriority.INTERACTIVE
-        #query_job.write_disposition = WriteDisposition.WRITE_TRUNCATE
-        #query_job.maximum_billing_tier = 2
-        #query_job.begin()
         job_config = bigquery.QueryJobConfig()
         job_config.allow_large_results = True
         job_config.flatten_results = False
@@ -711,30 +674,17 @@ class BqQueryBackedTableResource(BqQueryBasedResource):
         job_config.write_disposition = WriteDisposition.WRITE_TRUNCATE
         job_config.maximum_billing_tier = 2
 
-        query_job = self.bqClient.query(
+        self.queryJob = self.bqClient.query(
             self.makeFinalQuery(),
-            location="US",
-            job_config=job_config
+            job_config=job_config,
+            job_id=jobid
         )
-        self.queryJob = self.bqClient.get_job(
-                        query_job.job_id, location='US'
-                        )
 
     def key(self):
         return ".".join([self.table.dataset_id, self.table.table_id])
 
     def isRunning(self):
-        if self.queryJob:
-            #self.queryJob.reload()
-            self.queryJob = self.bqClient.get_job(
-                                    self.queryJob.job_id, location='US'
-                                    )
-            #self.table = self.bqClient.get_table(self.table)
-            print("BqQueryBackedTableResource", self.queryJob.job_id,
-                  self.queryJob.state, self.queryJob.errors)
-            return self.queryJob.state in ['RUNNING', 'PENDING']
-        else:
-            return False
+        return isJobRunning(self.queryJob)
 
     def dump(self):
         return self.makeFinalQuery()
@@ -799,28 +749,16 @@ class BqExtractTableResource(Resource):
         self.extractJob = self.bqClient.extract_table(
                 self.table, 
                 self.uris, 
-                location='US',
+                jobid,
                 job_config=processExtractTableOptions(self.options)
                 )
-
-        #self.extractJob = self.bqClient.extract_table_to_storage(jobid,self.table,self.uris)
-        #processExtractTableOptions(self.options, self.extractJob)
-        self.extractJob.result()
-        #self.extractJob.begin()
 
     def key(self):
         return ".".join(["extract", self.table.dataset_id,
                          self.table.table_id])
 
     def isRunning(self):
-        if self.extractJob:
-            #self.extractJob.reload()
-            self.extractJob = self.bqClient.get_job(self.extractJob.job_id, location='US')
-            print("BqExtractTableResource", self.extractJob.job_id,
-                  self.extractJob.state, self.extractJob.errors)
-            return self.extractJob.state in ['RUNNING', 'PENDING']
-        else:
-            return False
+        return isJobRunning(self.extractJob)
 
     def __str__(self):
         return "extract:" + ".".join([self.table.dataset_id,
@@ -888,15 +826,12 @@ def export_data_to_gcs(dataset_name, table_name, destination):
         dataset_name, table_name, destination))
 
 
-def isJobRunning(job, bqClient):
-    if job:
-        job = bqClient.get_job(job.job_id, location='US')
-        print(job.job_id,
-              job.state, job.errors)
-        return job.state in ['RUNNING', 'PENDING']
-    else:
-        return False
-
+def isJobRunning(job):
+    if not job:
+       return False
+    job.reload()
+    print(job.job_id, job.state, job.errors)
+    return job.running()
 
 def parseBucketAndPrefix(uris):
     bucket = uris.replace("gs://", "").split("/")[0]

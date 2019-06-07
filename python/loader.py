@@ -273,13 +273,14 @@ class BqQueryTemplatingFileLoader(FileLoader):
             uris = tuple([uri for uri in query.split("\n") if
                           uri.startswith("gs://")])
 
-            schema = ()
-            if "source_format" in templateVars and \
-                    templateVars["source_format"] == "PARQUET":
-                schema = None
-            else:
+            schema = None
+            if "source_format" not in templateVars:
+                raise Exception("source_format not found in template vars")
+        
+            if templateVars["source_format"] != "PARQUET":
                 with open(filePath + ".schema") as schemaFile:
                     schema = loadSchemaFromString(schemaFile.read().strip())
+                    templateVars["schema"] = schema
 
             rsrc = BqGcsTableLoadResource(bqTable,
                                           self.bqClient,
