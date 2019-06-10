@@ -10,6 +10,7 @@ atest2.extract_test_localdata_tab depends on atest2 atest2.test_local_tabbed_dat
 atest2.load_three depends on extract.atest2.three
 atest2.mergelog_mini_sample depends on atest2
 atest2.one depends on atest2 atest2.three atest2.two
+atest2.parquet_upload depends on nothing
 atest2.read_load_thread depends on atest2 atest2.load_three
 atest2.test_ab depends on atest2
 atest2.test_cd depends on atest2

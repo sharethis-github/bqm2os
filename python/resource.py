@@ -93,6 +93,10 @@ class BqJobs:
         return None
 
 
+def _buildFullyQualifiedTableName_(table: Table) -> str:
+    return "{}.{}.{}".format(table.project, table.dataset_id, table.table_id)
+
+
 def _buildDataSetKey_(table: Table) -> str:
     """
     :param table: a bq table
@@ -603,7 +607,9 @@ class BqViewBackedTableResource(BqQueryBasedResource):
     def create(self):
         try:
             if (self.tableExists()):
-                self.table.delete()
+
+                table_id = _buildFullyQualifiedTableName_(self.table)
+                self.bqClient.delete_table(table_id, not_found_ok=True)
                 self.table = Table(self.table.table_id,
                                    self.bqClient.dataset(
                                        self.table.dataset_id,
@@ -652,12 +658,15 @@ class BqQueryBackedTableResource(BqQueryBasedResource):
 
     def create(self):
         if self.tableExists():
-            self.table.delete()
+            table_id = _buildFullyQualifiedTableName_(self.table)
+            self.bqClient.delete_table(table_id, not_found_ok=True)
         jobid = "-".join(["create", self.table.dataset_id,
                           self.table.table_id, str(uuid.uuid4())])
+        use_legacy_sql = "#standardsql" not in self.makeFinalQuery().lower()
         job_config = bigquery.QueryJobConfig()
         job_config.allow_large_results = True
         job_config.flatten_results = False
+        job_config.use_legacy_sql = use_legacy_sql
         job_config.destination = self.table
         job_config.priority = QueryPriority.INTERACTIVE
         job_config.write_disposition = WriteDisposition.WRITE_TRUNCATE

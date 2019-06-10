@@ -1,3 +1,2 @@
-#legacySql
 
 select * from [{project}:{dataset}.load_three]
