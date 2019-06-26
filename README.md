@@ -34,3 +34,10 @@ loaded to.
 .localdata
 
 .gcsdata
+
+# Example Usage
+export SRC_DIR='~/src'
+./run.sh bash
+cd /mnt/templates/bq/domo2
+python /python/bqm2.py --defaultProject sharethis.com:quixotic-spot-526 --defaultDataset domo2 --maxConcurrent 20 --maxRetry 100000 --execute .
+
