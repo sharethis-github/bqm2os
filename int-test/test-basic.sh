@@ -3,6 +3,7 @@
 set -e
 set -o nounset
 
+
 cd /
 touch int-test/bq/*
 
