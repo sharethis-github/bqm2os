@@ -277,12 +277,9 @@ class BqDataLoadTableResource(BqTableBasedResource):
         self.table.reload()
         createdTime = self.table.modified
 
-        print("created time is ", str(createdTime))
         hashtag = self.makeHashTag()
 
         if createdTime:
-
-            print("description is ", self.table.description)
             # hijack this step to update description - ugh - debt supreme
             if not self.table.description:
                 self.table.description = "\n".join(["Do not edit", hashtag])
