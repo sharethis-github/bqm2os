@@ -291,7 +291,6 @@ class BqDataLoadTableResource(BqTableBasedResource):
         self.table.schema = self.schema
 
         if self.exists():
-            print("Table exists and we're wiping out the description")
             self.table.description = ""
             self.table.update()
 
