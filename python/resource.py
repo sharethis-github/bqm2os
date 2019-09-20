@@ -290,6 +290,10 @@ class BqDataLoadTableResource(BqTableBasedResource):
     def create(self):
         self.table.schema = self.schema
 
+        if self.exists():
+            self.table.description = ""
+            self.table.update()
+
         fieldDelimiter = '\t'
         with open(self.file, 'r') as readable:
             srcFormat = BqDataLoadTableResource.detectSourceFormat(

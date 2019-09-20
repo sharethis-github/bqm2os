@@ -3,6 +3,7 @@
 set -e
 set -o nounset
 
+
 cd /
 touch int-test/bq/*
 
@@ -15,4 +16,8 @@ python /python/bqm2.py --defaultDataset ${dataset} --execute int-test/bq/
 
 # check view recreation
 touch int-test/bq/*.view
+python /python/bqm2.py --defaultDataset ${dataset} --execute int-test/bq/
+
+
+echo 'c	d	e' >> int-test/bq/test_local_json_data.localdata
 python /python/bqm2.py --defaultDataset ${dataset} --execute int-test/bq/
