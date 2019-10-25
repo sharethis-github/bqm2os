@@ -249,6 +249,102 @@ def generate_file_md5(filename, blocksize=2**20):
     return m.hexdigest()
 
 
+class BqProcessTableResource(BqTableBasedResource):
+    """ todo: currently we block during the creation of this
+    table but we should probably treat this just like any table
+    create and put it in the background
+    """
+    def __init__(self, file: str, table: Table,
+                 schema: tuple, bqClient: Client,
+                 job: _AsyncJob):
+        """ """
+        super(BqDataLoadTableResource, self).__init__(table, bqClient)
+        self.file = file
+        self.table = table
+        self.bqClient = bqClient
+        self.schema = schema
+        self.job = job
+
+    def exists(self):
+        return self.table.exists()
+
+    def makeHashTag(self):
+        schemahash = generate_file_md5(self.file + ".schema")
+        return "filehash:" + generate_file_md5(self.file) + ":" + schemahash
+
+    def updateTime(self):
+        """ time in milliseconds.  None if not created """
+        self.table.reload()
+        createdTime = self.table.modified
+
+        print("created time is ", str(createdTime))
+        hashtag = self.makeHashTag()
+
+        if createdTime:
+
+            print("description is ", self.table.description)
+            # hijack this step to update description - ugh - debt supreme
+            if not self.table.description:
+                self.table.description = "\n".join(["Do not edit", hashtag])
+                self.table.update()
+            return int(createdTime.strftime("%s")) * 1000
+        return None
+
+    def create(self):
+        self.table.schema = self.schema
+
+        if self.exists():
+            print("Table exists and we're wiping out the description")
+            self.table.description = ""
+            self.table.update()
+
+        fieldDelimiter = '\t'
+        with open(self.file, 'r') as readable:
+            srcFormat = BqDataLoadTableResource.detectSourceFormat(
+                                                readable.readline())
+            if srcFormat != SourceFormat.CSV:
+                fieldDelimiter = None
+
+        with open(self.file, 'rb') as readable:
+            ret = self.table.upload_from_file(
+                readable, source_format=srcFormat,
+                field_delimiter=fieldDelimiter,
+                ignore_unknown_values=True,
+                write_disposition=WriteDisposition.WRITE_TRUNCATE)
+            self.job = ret
+
+    def key(self):
+        return ".".join([self.table.dataset_name, self.table.name])
+
+    def dependsOn(self, resource: Resource):
+        return self.table.dataset_name == resource.key()
+
+    def isRunning(self):
+        return isJobRunning(self.job)
+
+    def __str__(self):
+        return "localdata:" + ".".join([self.table.dataset_name,
+                                        self.table.name])
+
+    def detectSourceFormat(firstFileLine: str):
+        try:
+            json.loads(firstFileLine)
+            return SourceFormat.NEWLINE_DELIMITED_JSON
+        except JSONDecodeError:
+            return SourceFormat.CSV
+
+    def __eq__(self, other):
+        try:
+            return self.file == other.file and self.key() == other.key()
+        except Exception:
+            return False
+
+    def shouldUpdate(self):
+        self.updateTime()
+        if not self.makeHashTag() in self.table.description:
+            return True
+        return False
+
 class BqDataLoadTableResource(BqTableBasedResource):
     """ todo: currently we block during the creation of this
     table but we should probably treat this just like any table
