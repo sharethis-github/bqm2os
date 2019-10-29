@@ -1,0 +1,7 @@
+#!/bin/bash
+
+# manually add a dependency {project}.{dataset}.one
+# avoids incompatibility
+unset PYTHONPATH
+
+gsutil ls

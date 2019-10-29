@@ -20,4 +20,13 @@ RUN pip install --upgrade google-cloud-core==0.27.1
 RUN pip install --upgrade google-cloud-bigquery==0.27.0
 RUN pip install --upgrade google-cloud-storage==1.5.0
 RUN apt-get install graphviz -y
+
+# add google sdk
+
+RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
+RUN curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
+RUN apt-get install apt-transport-https ca-certificates -y
+RUN apt-get update -y
+RUN apt-get install google-cloud-sdk -y
+
 ADD /python /python

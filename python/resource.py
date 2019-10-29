@@ -268,6 +268,25 @@ class BqProcessTableResource(BqTableBasedResource):
     def exists(self):
         return self.table.exists()
 
+    def dependsOn(self, other: Resource):
+        return self.legacyBqQueryDependsOn(other)
+
+    def legacyBqQueryDependsOn(self, other: Resource):
+        if self == other:
+            return False
+
+        filtered = getFiltered(self.query)
+        if strictSubstring("".join(["", other.key(), " "]), filtered):
+            return True
+
+            # we need a better way!
+            # other may be simply a dataset in which case it will have not
+            # .query field
+        if isinstance(other, BqDatasetBackedResource) \
+                and strictSubstring(other.key(), self.key()):
+            return True
+        return False
+
     def makeHashTag(self):
 
         m = hashlib.md5()
@@ -339,9 +358,6 @@ class BqProcessTableResource(BqTableBasedResource):
 
     def key(self):
         return ".".join([self.table.dataset_name, self.table.name])
-
-    def dependsOn(self, resource: Resource):
-        return self.table.dataset_name == resource.key()
 
     def isRunning(self):
         return isJobRunning(self.job)
