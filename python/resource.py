@@ -958,6 +958,7 @@ def export_data_to_gcs(dataset_name, table_name, destination):
 def isJobRunning(job):
     if job:
         job.reload()
+        print(job.name, job.state, job.errors)
         return job.state in ['RUNNING', 'PENDING']
     else:
         return False
