@@ -326,7 +326,7 @@ class BqProcessTableResource(BqTableBasedResource):
 
         # pump the script into a file
         # script name
-        script = "/tmp/"+ _buildDataSetKey_(table=self.table)
+        script = "/tmp/" + _buildDataSetKey_(table=self.table)
         with open(script, 'wb') as of:
             of.write(bytearray(self.query, 'utf-8'))
 
@@ -387,7 +387,6 @@ class BqProcessTableResource(BqTableBasedResource):
 
     def dump(self):
         return self.query
-
 
 
 class BqDataLoadTableResource(BqTableBasedResource):

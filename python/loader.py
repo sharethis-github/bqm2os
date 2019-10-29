@@ -293,8 +293,8 @@ class BqQueryTemplatingFileLoader(FileLoader):
             with open(filePath + ".schema") as schemaFile:
                 schema = loadSchemaFromString(schemaFile.read().strip())
             arsrc = BqProcessTableResource(query, bqTable, schema,
-                                               self.bqClient,
-                                               job=jT)
+                                           self.bqClient,
+                                           job=jT)
             out[key] = arsrc
 
         dsetKey = _buildDataSetKey_(bqTable)
@@ -346,6 +346,7 @@ class BqQueryTemplatingFileLoader(FileLoader):
         except JSONDecodeError:
             raise Exception("Problem reading json var list from file: ",
                             filePath)
+
 
 class BqDataFileLoader(FileLoader):
     def __init__(self, bqClient: Client, defaultDataset=None,
