@@ -293,7 +293,11 @@ if __name__ == "__main__":
             gcsdata=BqQueryTemplatingFileLoader(client, gcsClient,
                                                 bqJobs,
                                                 TableType.TABLE_GCS_LOAD,
-                                                kwargs)))
+                                                kwargs),
+            bashtemplate=BqQueryTemplatingFileLoader(loadClient, gcsClient,
+                                                     bqJobs,
+                                                     TableType.BASH_TABLE,
+                                                     kwargs)))
 
     (resources, dependencies) = builder.buildDepend(args)
     executor = DependencyExecutor(resources, dependencies,

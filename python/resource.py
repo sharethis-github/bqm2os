@@ -249,6 +249,146 @@ def generate_file_md5(filename, blocksize=2**20):
     return m.hexdigest()
 
 
+class BqProcessTableResource(BqTableBasedResource):
+    """ todo: currently we block during the creation of this
+    table but we should probably treat this just like any table
+    create and put it in the background
+    """
+    def __init__(self, query: str, table: Table,
+                 schema: tuple, bqClient: Client,
+                 job: _AsyncJob):
+        """ """
+        super(BqProcessTableResource, self).__init__(table, bqClient)
+        self.query = query
+        self.table = table
+        self.bqClient = bqClient
+        self.schema = schema
+        self.job = job
+
+    def exists(self):
+        return self.table.exists()
+
+    def dependsOn(self, other: Resource):
+        return self.legacyBqQueryDependsOn(other)
+
+    def legacyBqQueryDependsOn(self, other: Resource):
+        if self == other:
+            return False
+
+        filtered = getFiltered(self.query)
+        if strictSubstring("".join(["", other.key(), " "]), filtered):
+            return True
+
+            # we need a better way!
+            # other may be simply a dataset in which case it will have not
+            # .query field
+        if isinstance(other, BqDatasetBackedResource) \
+                and strictSubstring(other.key(), self.key()):
+            return True
+        return False
+
+    def makeHashTag(self):
+
+        m = hashlib.md5()
+        m.update(self.query.encode("utf-8"))
+        return m.hexdigest()
+
+        return "filehash:" + generate_file_md5(self.file) + ":" + schemahash
+
+    def updateTime(self):
+        """ time in milliseconds.  None if not created """
+        self.table.reload()
+        createdTime = self.table.modified
+
+        print("created time is ", str(createdTime))
+        hashtag = self.makeHashTag()
+
+        if createdTime:
+
+            print("description is ", self.table.description)
+            # hijack this step to update description - ugh - debt supreme
+            if not self.table.description:
+                self.table.description = "\n".join(["Do not edit", hashtag])
+                self.table.update()
+            return int(createdTime.strftime("%s")) * 1000
+        return None
+
+    def create(self):
+        self.table.schema = self.schema
+
+        if self.exists():
+            print("Table exists and we're wiping out the description")
+            self.table.description = ""
+            self.table.update()
+
+        # we exec
+        import os
+
+        # pump the script into a file
+        # script name
+        script = "/tmp/" + _buildDataSetKey_(table=self.table)
+        with open(script, 'wb') as of:
+            of.write(bytearray(self.query, 'utf-8'))
+
+        os.chmod(script, 0o744)
+        data = os.popen(script).read()
+        datascript = script + ".data"
+        with open(datascript, 'wb') as writable:
+            writable.write(bytearray(data, 'utf-8'))
+
+        # todo - allow caller to specify file delimiter
+        fieldDelimiter = '\t'
+        with open(datascript, 'r') as readable:
+            srcFormat = BqDataLoadTableResource.detectSourceFormat(
+                                                readable.readline())
+            if srcFormat != SourceFormat.CSV:
+                fieldDelimiter = None
+
+        with open(datascript, 'rb') as readable:
+            ret = self.table.upload_from_file(
+                readable, source_format=srcFormat,
+                field_delimiter=fieldDelimiter,
+                ignore_unknown_values=True,
+                write_disposition=WriteDisposition.WRITE_TRUNCATE,
+                job_name=str(uuid.uuid4()),
+                rewind=True
+            )
+
+        self.job = ret
+
+    def key(self):
+        return ".".join([self.table.dataset_name, self.table.name])
+
+    def isRunning(self):
+        return isJobRunning(self.job)
+
+    def __str__(self):
+        return "localdata:" + ".".join([self.table.dataset_name,
+                                        self.table.name])
+
+    def detectSourceFormat(firstFileLine: str):
+        try:
+            json.loads(firstFileLine)
+            return SourceFormat.NEWLINE_DELIMITED_JSON
+        except JSONDecodeError:
+            return SourceFormat.CSV
+
+    def __eq__(self, other):
+        try:
+            return self.query == other.query and self.key() == other.key()
+        except Exception:
+            return False
+
+    def shouldUpdate(self):
+        self.updateTime()
+        if not self.makeHashTag() in self.table.description:
+            return True
+        return False
+
+    def dump(self):
+        return self.query
+
+
 class BqDataLoadTableResource(BqTableBasedResource):
     """ todo: currently we block during the creation of this
     table but we should probably treat this just like any table
@@ -817,8 +957,7 @@ def export_data_to_gcs(dataset_name, table_name, destination):
 def isJobRunning(job):
     if job:
         job.reload()
-        print(job.name,
-              job.state, job.errors)
+        print(job.name, job.state, job.errors)
         return job.state in ['RUNNING', 'PENDING']
     else:
         return False
