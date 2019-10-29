@@ -254,12 +254,12 @@ class BqProcessTableResource(BqTableBasedResource):
     table but we should probably treat this just like any table
     create and put it in the background
     """
-    def __init__(self, file: str, table: Table,
+    def __init__(self, query: str, table: Table,
                  schema: tuple, bqClient: Client,
                  job: _AsyncJob):
         """ """
-        super(BqDataLoadTableResource, self).__init__(table, bqClient)
-        self.file = file
+        super(BqProcessTableResource, self).__init__(table, bqClient)
+        self.query = query
         self.table = table
         self.bqClient = bqClient
         self.schema = schema
@@ -269,7 +269,11 @@ class BqProcessTableResource(BqTableBasedResource):
         return self.table.exists()
 
     def makeHashTag(self):
-        schemahash = generate_file_md5(self.file + ".schema")
+
+        m = hashlib.md5()
+        m.update(self.query.encode("utf-8"))
+        return m.hexdigest()
+
         return "filehash:" + generate_file_md5(self.file) + ":" + schemahash
 
     def updateTime(self):
@@ -298,20 +302,40 @@ class BqProcessTableResource(BqTableBasedResource):
             self.table.description = ""
             self.table.update()
 
+        # we exec
+        import os
+
+        # pump the script into a file
+        # script name
+        script = "/tmp/"+ _buildDataSetKey_(table=self.table)
+        with open(script, 'wb') as of:
+            of.write(bytearray(self.query, 'utf-8'))
+
+        os.chmod(script, 0o744)
+        data = os.popen(script).read()
+        datascript = script + ".data"
+        with open(datascript, 'wb') as writable:
+            writable.write(bytearray(data, 'utf-8'))
+
+        # todo - allow caller to specify file delimiter
         fieldDelimiter = '\t'
-        with open(self.file, 'r') as readable:
+        with open(datascript, 'r') as readable:
             srcFormat = BqDataLoadTableResource.detectSourceFormat(
                                                 readable.readline())
             if srcFormat != SourceFormat.CSV:
                 fieldDelimiter = None
 
-        with open(self.file, 'rb') as readable:
+        with open(datascript, 'rb') as readable:
             ret = self.table.upload_from_file(
                 readable, source_format=srcFormat,
                 field_delimiter=fieldDelimiter,
                 ignore_unknown_values=True,
-                write_disposition=WriteDisposition.WRITE_TRUNCATE)
-            self.job = ret
+                write_disposition=WriteDisposition.WRITE_TRUNCATE,
+                job_name=str(uuid.uuid4()),
+                rewind=True
+            )
+
+        self.job = ret
 
     def key(self):
         return ".".join([self.table.dataset_name, self.table.name])
@@ -335,7 +359,7 @@ class BqProcessTableResource(BqTableBasedResource):
 
     def __eq__(self, other):
         try:
-            return self.file == other.file and self.key() == other.key()
+            return self.query == other.query and self.key() == other.key()
         except Exception:
             return False
 
@@ -344,6 +368,11 @@ class BqProcessTableResource(BqTableBasedResource):
         if not self.makeHashTag() in self.table.description:
             return True
         return False
+
+    def dump(self):
+        return self.query
+
+
 
 class BqDataLoadTableResource(BqTableBasedResource):
     """ todo: currently we block during the creation of this
@@ -917,8 +946,6 @@ def export_data_to_gcs(dataset_name, table_name, destination):
 def isJobRunning(job):
     if job:
         job.reload()
-        print(job.name,
-              job.state, job.errors)
         return job.state in ['RUNNING', 'PENDING']
     else:
         return False

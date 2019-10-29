@@ -120,16 +120,18 @@ class TableType(Enum):
     TABLE_GCS_LOAD = 4
     UNION_TABLE = 5
     UNION_VIEW = 6
+    BASH_TABLE = 7
 
 
-class BqUnionFileLoader(FileLoader):
-    def __init__(self):
-        pass
-
-    def load(self, file) -> Resource:
-        """ The resource loader will attempt to load the resources
-        which it handles from the file arg """
-        pass
+#
+# class BqUnionFileLoader(FileLoader):
+#     def __init__(self):
+#         pass
+#
+#     def load(self, file) -> Resource:
+#         """ The resource loader will attempt to load the resources
+#         which it handles from the file arg """
+#         pass
 
 
 class BqQueryTemplatingFileLoader(FileLoader):
@@ -297,6 +299,15 @@ class BqQueryTemplatingFileLoader(FileLoader):
                                                   self.bqClient)
                 out[key] = arsrc
 
+        elif self.tableType == TableType.BASH_TABLE:
+            jT = self.bqJobs.getJobForTable(bqTable)
+            with open(filePath + ".schema") as schemaFile:
+                schema = loadSchemaFromString(schemaFile.read().strip())
+            arsrc = BqProcessTableResource(query, bqTable, schema,
+                                               self.bqClient,
+                                               job=jT)
+            out[key] = arsrc
+
         dsetKey = _buildDataSetKey_(bqTable)
         if dsetKey not in out:
             out[dsetKey] = cacheDataSet(self.bqClient, bqTable,
@@ -346,33 +357,38 @@ class BqQueryTemplatingFileLoader(FileLoader):
         except JSONDecodeError:
             raise Exception("Problem reading json var list from file: ",
                             filePath)
-
-
-class BqProcessFileLoader(FileLoader):
-    def __init__(self, bqClient: Client, defaultDataset=None,
-                 defaultProject=None, bqJobs=None):
-        self.bqClient = bqClient
-        self.defaultDataset = defaultDataset
-        self.defaultProject = defaultProject
-        self.datasets = {}
-        self.bqJobs = bqJobs
-
-    def load(self, filePath):
-        schemaFilePath = filePath + ".schema"
-        bqTable = parseDatasetTable(filePath, self.defaultDataset,
-                                    self.bqClient, self.defaultProject)
-
-        with open(schemaFilePath) as schemaFile:
-            schema = loadSchemaFromString(schemaFile.read().strip())
-
-        jT = self.bqJobs.getJobForTable(bqTable)
-
-        ret = []
-        ret.append(BqProcessTableResource(filePath, bqTable, schema,
-                                          self.bqClient, jT))
-        ret.append(cacheDataSet(self.bqClient, bqTable,
-                                self.datasets))
-        return ret
+#
+# # intent here to load scripts
+# class BqProcessFileLoader(BqQueryTemplatingFileLoader):
+#     def __init__(self, bqClient: Client, gcsClient: storage.Client,
+#                  bqJobs: BqJobs, tableType:
+#                  TableType, defaultDataset=None,
+#                  defaultProject=None, defaultVars={}):
+#
+#         super(BqProcessFileLoader, self).__init__(bqClient,
+#                                            gcsClient,
+#                                            bqJobs,
+#                                            tableType,
+#                                            defaultVars)
+#         self.defaultDataset = defaultDataset
+#         self.defaultProject = defaultProject
+#
+#     def load(self, filePath):
+#         schemaFilePath = filePath + ".schema"
+#         bqTable = parseDatasetTable(filePath, self.defaultDataset,
+#                                     self.bqClient, self.defaultProject)
+#
+#         with open(schemaFilePath) as schemaFile:
+#             schema = loadSchemaFromString(schemaFile.read().strip())
+#
+#         jT = self.bqJobs.getJobForTable(bqTable)
+#
+#         ret = []
+#         ret.append(BqProcessTableResource(filePath, bqTable, schema,
+#                                           self.bqClient, jT))
+#         ret.append(cacheDataSet(self.bqClient, bqTable,
+#                                 self.datasets))
+#         return ret
 
 class BqDataFileLoader(FileLoader):
     def __init__(self, bqClient: Client, defaultDataset=None,
