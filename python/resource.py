@@ -846,7 +846,7 @@ def processExtractTableOptions(options: dict,
         job.field_delimiter = options['field_delimiter']
 
     if "print_header" in options:
-        job.field_delimiter = bool(options['print_header'])
+        job.print_header = bool(options['print_header'])
 
 
 class BqExtractTableResource(Resource):
