@@ -6,6 +6,7 @@ from enum import Enum
 import hashlib
 from json.decoder import JSONDecodeError
 
+import subprocess
 from google.api.core.exceptions import NotFound
 from google.cloud import storage
 from google.cloud.bigquery.client import Client
@@ -17,6 +18,7 @@ from google.cloud.bigquery.job import WriteDisposition, \
 import time
 from google.cloud.bigquery.table import Table
 import logging
+import io
 
 
 class Resource:
@@ -326,15 +328,29 @@ class BqProcessTableResource(BqTableBasedResource):
 
         # pump the script into a file
         # script name
-        script = "/tmp/" + _buildDataSetKey_(table=self.table)
+        script = "/tmp/" + _buildDataSetTableKey_(table=self.table)
         with open(script, 'wb') as of:
             of.write(bytearray(self.query, 'utf-8'))
 
         os.chmod(script, 0o744)
-        data = os.popen(script).read()
+
         datascript = script + ".data"
         with open(datascript, 'wb') as writable:
-            writable.write(bytearray(data, 'utf-8'))
+            with open(datascript + ".error", 'w') as errors:
+                try:
+                    fHandle = subprocess.Popen(script, stdout=writable,
+                                               stderr=errors)
+                except OSError as ose:
+                    logging.error(ose)
+                    return None
+
+                fHandle.wait()
+
+        if fHandle.returncode != 0:
+            err = open(datascript + ".error").read()
+            print("exit status != 0, got " + str(fHandle.returncode)
+                  + "error:" + err)
+            return None
 
         # todo - allow caller to specify file delimiter
         fieldDelimiter = '\t'
@@ -535,19 +551,24 @@ class BqGcsTableLoadResource(BqTableBasedResource):
                  bqClient: Client,
                  gcsClient: storage.Client,
                  job: LoadTableFromStorageJob,
-                 uris: tuple,
+                 query: str,
                  schema: tuple,
                  options: dict):
         super(BqGcsTableLoadResource, self)\
             .__init__(table, bqClient)
         self.job = job
         self.gcsClient = gcsClient,
-        self.uris = uris
+        self.query = query
         self.schema = schema
         self.options = options
+        self.uris = tuple([uri for uri in self.query.split("\n") if
+                          uri.startswith("gs://")])
 
     def isRunning(self):
         return isJobRunning(self.job)
+
+    def dump(self):
+        return str(self.uris)
 
     def create(self):
         jobid = "-".join(["create", self.table.dataset_name,
@@ -567,34 +588,22 @@ class BqGcsTableLoadResource(BqTableBasedResource):
         if self == other:
             return False
 
-        if not isinstance(other, BqExtractTableResource):
-            return False
-        # TODO: this is pretty janky but works (mostly) for now
-        me = set([self.uris[i] for i in range(len(self.uris))])
-        them = set(other.uris.split(","))
-        return len(me.intersection(them)) > 0
+        if isinstance(other, BqDatasetBackedResource) \
+                and strictSubstring(other.key(), self.key()):
+            return True
 
-    # we'll come back to this - Doug
-    # def updateTime(self):
-    #     objs = []
-    #     for uri in self.uris:
-    #         bucket, prefix = parseBucketAndPrefix(uri)
-    #         staridx = prefix.index(prefix, "*")
-    #         if staridx != -1:
-    #             prefix = prefix[:staridx]
-    #
-    #         files = [int(o.updated.timestamp() * 1000) for o in
-    #                 self.gcsClient.bucket(bucket).list_blobs(
-    #                 prefix=prefix)]
-    #         objs.append(files)
-    #
-    #
-    #     if not len(objs):
-    #         self.table.reload()
-    #         createdTime = self.table.modified
-    #         return int(createdTime.strftime("%s")) * 1000
-    #
-    #     return max(objs)
+        if not isinstance(other, BqExtractTableResource):
+            depends = self.legacyBqQueryDependsOn(other)
+            if depends:
+                return True
+
+        if isinstance(other, BqExtractTableResource):
+            # TODO: this is pretty janky but works (mostly) for now
+            me = set([self.uris[i] for i in range(len(self.uris))])
+            them = set(other.uris.split(","))
+            return len(me.intersection(them)) > 0
+
+        return False
 
     def shouldUpdate(self):
         return False
@@ -608,6 +617,18 @@ class BqGcsTableLoadResource(BqTableBasedResource):
             return self.key() == other.key() and self.uris == other.uris
         except Exception:
             return False
+
+    def legacyBqQueryDependsOn(self, other: Resource):
+        if self == other:
+            return False
+
+        gcsremoved = re.sub('^gs:.*$', "\n", self.query)
+        filtered = getFiltered(gcsremoved)
+
+        if strictSubstring("".join(["", other.key(), " "]), filtered):
+            return True
+
+        return False
 
 
 class BqQueryBasedResource(BqTableBasedResource):
@@ -737,44 +758,6 @@ def strictSubstring(contained, container):
     :rtype: bool
     """
     return contained in container and len(contained) < len(container)
-
-
-class BqQueryBackedTableResource(BqQueryBasedResource):
-    def __init__(self, queries: list, table: Table,
-                 bqClient: Client, queryJob: QueryJob):
-        super(BqQueryBackedTableResource, self)\
-            .__init__(queries, table, None, bqClient)
-        self.queryJob = queryJob
-
-    def create(self):
-        if self.table.exists():
-            self.table.delete()
-
-        jobid = "-".join(["create", self.table.dataset_name,
-                          self.table.name, str(uuid.uuid4())])
-        query_job = self.bqClient.run_async_query(jobid, self.makeFinalQuery())
-
-        # TODO: this should probably all be options
-        query_job.allow_large_results = True
-        query_job.flatten_results = False
-        query_job.destination = self.table
-        query_job.priority = QueryPriority.INTERACTIVE
-        query_job.write_disposition = WriteDisposition.WRITE_TRUNCATE
-        query_job.maximum_billing_tier = 2
-        query_job.begin()
-        self.queryJob = query_job
-
-    def isRunning(self):
-        if self.queryJob:
-            self.queryJob.reload()
-            print(self.queryJob.name,
-                  self.queryJob.state, self.queryJob.errors)
-            return self.queryJob.state in ['RUNNING', 'PENDING']
-        else:
-            return False
-
-    def dump(self):
-        return self.makeFinalQuery()
 
 
 class BqQueryBackedTableResource(BqQueryBasedResource):

@@ -30,3 +30,6 @@ RUN apt-get update -y
 RUN apt-get install google-cloud-sdk -y
 
 ADD /python /python
+ADD /test /test
+
+RUN /test/test.sh

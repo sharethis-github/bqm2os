@@ -6,10 +6,8 @@ cd $(dirname $0)
 
 . env.sh
 
+echo Building container and testing within docker build
 docker build -t $imagename:$current_commit .
-
-echo Executing unit tests
-./unit-test.sh
 
 echo Executing integration tests - $(date)
 echo
