@@ -4,6 +4,7 @@ set -e
 set -o nounset
 
 gcloud auth activate-service-account --key-file $GOOGLE_APPLICATION_CREDENTIALS
+gsutil ls
 
 cd /
 touch int-test/bq/*
