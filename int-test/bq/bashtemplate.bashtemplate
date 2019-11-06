@@ -4,4 +4,6 @@
 # avoids incompatibility
 unset PYTHONPATH
 
+gcloud auth activate-service-account --key-file $GOOGLE_APPLICATION_CREDENTIALS
+
 gsutil ls
