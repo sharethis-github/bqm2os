@@ -1,9 +1,5 @@
 #!/bin/bash
 
-# manually add a dependency {project}.{dataset}.one
-# avoids incompatibility
-unset PYTHONPATH
-
-gcloud auth activate-service-account --key-file $GOOGLE_APPLICATION_CREDENTIALS
-
-gsutil ls
+echo 1
+echo 2
+echo 3
