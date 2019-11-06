@@ -335,15 +335,18 @@ class BqProcessTableResource(BqTableBasedResource):
 
         datascript = script + ".data"
         with open(datascript, 'wb') as writable:
+            errors = io.StringIO("")
             try:
-                fHandle = subprocess.Popen(script, stdout=writable)
+                fHandle = subprocess.Popen(script, stdout=writable,
+                                           stderr=errors)
             except OSError as ose:
                 logging.error(ose)
                 return None
 
             fHandle.wait()
             if fHandle.returncode != 0:
-                print("  os.wait:exit status != 0, got " + str(fHandle.returncode))
+                print("exit status != 0, got " + str(fHandle.returncode)
+                      + "error:" + errors.getvalue())
                 return None
 
         # todo - allow caller to specify file delimiter
@@ -609,7 +612,6 @@ class BqGcsTableLoadResource(BqTableBasedResource):
             return False
 
         filtered = getFiltered(self.query)
-        #print(filtered, other.key())
         if strictSubstring("".join(["", other.key(), " "]), filtered):
             return True
 
