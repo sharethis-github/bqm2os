@@ -12,6 +12,7 @@ ADD /root /root
 RUN pip install gevent
 RUN pip install cython
 RUN pip install frozendict
+RUN pip install graphviz
 
 ## aws client
 RUN pip install --upgrade awscli
