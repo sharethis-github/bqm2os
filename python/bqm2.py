@@ -122,8 +122,8 @@ class DependencyExecutor:
             if not len(s):
                 continue
             for n in s:
-                if len(str(n).split(".")) == 1:
-                    continue
+                # if len(str(n).split(".")) == 1:
+                #     continue
                 print("".join(['"', k, '"']), "->", "".join(['"', n, '"']))
         print("}")
 
