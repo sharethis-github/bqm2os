@@ -256,8 +256,6 @@ class BqQueryTemplatingFileLoader(FileLoader):
 
         elif self.tableType == TableType.TABLE_GCS_LOAD:
             jT = self.bqJobs.getJobForTable(bqTable)
-            uris = tuple([uri for uri in query.split("\n") if
-                          uri.startswith("gs://")])
 
             with open(filePath + ".schema") as schemaFile:
                 schema = loadSchemaFromString(schemaFile.read().strip())
@@ -265,7 +263,7 @@ class BqQueryTemplatingFileLoader(FileLoader):
             rsrc = BqGcsTableLoadResource(bqTable,
                                           self.bqClient,
                                           self.gcsClient,
-                                          jT, uris, schema,
+                                          jT, query, schema,
                                           templateVars)
             out[key] = rsrc
         elif self.tableType == TableType.UNION_TABLE:
