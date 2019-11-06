@@ -18,6 +18,7 @@ from google.cloud.bigquery.job import WriteDisposition, \
 import time
 from google.cloud.bigquery.table import Table
 import logging
+import io
 
 
 class Resource:
@@ -335,19 +336,21 @@ class BqProcessTableResource(BqTableBasedResource):
 
         datascript = script + ".data"
         with open(datascript, 'wb') as writable:
-            errors = io.StringIO("")
-            try:
-                fHandle = subprocess.Popen(script, stdout=writable,
-                                           stderr=errors)
-            except OSError as ose:
-                logging.error(ose)
-                return None
+            with open(datascript + ".error", 'w') as errors:
+                try:
+                    fHandle = subprocess.Popen(script, stdout=writable,
+                                               stderr=errors)
+                except OSError as ose:
+                    logging.error(ose)
+                    return None
 
-            fHandle.wait()
-            if fHandle.returncode != 0:
-                print("exit status != 0, got " + str(fHandle.returncode)
-                      + "error:" + errors.getvalue())
-                return None
+                fHandle.wait()
+
+        if fHandle.returncode != 0:
+            err = open(datascript + ".error").read()
+            print("exit status != 0, got " + str(fHandle.returncode)
+                  + "error:" + err)
+            return None
 
         # todo - allow caller to specify file delimiter
         fieldDelimiter = '\t'
@@ -585,14 +588,22 @@ class BqGcsTableLoadResource(BqTableBasedResource):
         if self == other:
             return False
 
-        if isinstance(other, BqExtractTableResource):
-            me = set([self.uris[i] for i in range(len(self.uris))])
-            them = set(other.uris.split(","))
-            intersect = len(me.intersection(them)) > 0
-            if intersect:
+        if isinstance(other, BqDatasetBackedResource) \
+                and strictSubstring(other.key(), self.key()):
+            return True
+
+        if not isinstance(other, BqExtractTableResource):
+            depends = self.legacyBqQueryDependsOn(other)
+            if depends:
                 return True
 
-        return self.legacyBqQueryDependsOn(other)
+        if isinstance(other, BqExtractTableResource):
+            # TODO: this is pretty janky but works (mostly) for now
+            me = set([self.uris[i] for i in range(len(self.uris))])
+            them = set(other.uris.split(","))
+            return len(me.intersection(them)) > 0
+
+        return False
 
     def shouldUpdate(self):
         return False
@@ -611,16 +622,12 @@ class BqGcsTableLoadResource(BqTableBasedResource):
         if self == other:
             return False
 
-        filtered = getFiltered(self.query)
+        gcsremoved = re.sub('^gs:.*$', "\n", self.query)
+        filtered = getFiltered(gcsremoved)
+
         if strictSubstring("".join(["", other.key(), " "]), filtered):
             return True
 
-            # we need a better way!
-            # other may be simply a dataset in which case it will have not
-            # .query field
-        if isinstance(other, BqDatasetBackedResource) \
-                and strictSubstring(other.key(), self.key()):
-            return True
         return False
 
 
@@ -751,44 +758,6 @@ def strictSubstring(contained, container):
     :rtype: bool
     """
     return contained in container and len(contained) < len(container)
-
-
-class BqQueryBackedTableResource(BqQueryBasedResource):
-    def __init__(self, queries: list, table: Table,
-                 bqClient: Client, queryJob: QueryJob):
-        super(BqQueryBackedTableResource, self)\
-            .__init__(queries, table, None, bqClient)
-        self.queryJob = queryJob
-
-    def create(self):
-        if self.table.exists():
-            self.table.delete()
-
-        jobid = "-".join(["create", self.table.dataset_name,
-                          self.table.name, str(uuid.uuid4())])
-        query_job = self.bqClient.run_async_query(jobid, self.makeFinalQuery())
-
-        # TODO: this should probably all be options
-        query_job.allow_large_results = True
-        query_job.flatten_results = False
-        query_job.destination = self.table
-        query_job.priority = QueryPriority.INTERACTIVE
-        query_job.write_disposition = WriteDisposition.WRITE_TRUNCATE
-        query_job.maximum_billing_tier = 2
-        query_job.begin()
-        self.queryJob = query_job
-
-    def isRunning(self):
-        if self.queryJob:
-            self.queryJob.reload()
-            print(self.queryJob.name,
-                  self.queryJob.state, self.queryJob.errors)
-            return self.queryJob.state in ['RUNNING', 'PENDING']
-        else:
-            return False
-
-    def dump(self):
-        return self.makeFinalQuery()
 
 
 class BqQueryBackedTableResource(BqQueryBasedResource):
