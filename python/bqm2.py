@@ -116,16 +116,22 @@ class DependencyExecutor:
 
                     self.dependencies[n] = self.dependencies[n] - torm
 
+    def addNl(self, rsrc):
+        return "".join(['"', "\n".join(rsrc.split(".")), '"'])
+
     def dotml(self):
         print("digraph g {\n")
         for (k, s) in sorted(self.dependencies.items()):
             if not len(s):
                 continue
             for n in s:
-                # if len(str(n).split(".")) == 1:
-                #     continue
-                print("".join(['"', k, '"']), "->", "".join(['"', n, '"']))
-        print("}")
+                if len(str(n).split(".")) == 1:
+                    continue
+                node = []
+
+                print("".join(self.addNl(k)), "->",
+                      "".join(self.addNl(n)))
+                print("}")
 
     def handleRetries(self, retries, rsrcKey):
         retries[rsrcKey] -= 1
