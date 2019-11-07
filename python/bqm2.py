@@ -117,7 +117,7 @@ class DependencyExecutor:
                     self.dependencies[n] = self.dependencies[n] - torm
 
     def addNl(self, rsrc):
-        return "".join(['"', "\n".join(rsrc.split(".")), '"'])
+        return "".join(['"', "".join(rsrc.split(".")), '"'])
 
     def dotml(self):
         print("digraph g {\n")
