@@ -38,6 +38,7 @@ class DependencyBuilder:
             for name in listdir(folder):
                 file = "/".join([folder, name])
                 if isfile(file) and self.loader.handles(file):
+                    print("Loading file: " + file)
                     for rsrc in self.loader.load(file):
                         resources[rsrc.key()] = rsrc
 
@@ -117,7 +118,7 @@ class DependencyExecutor:
                     self.dependencies[n] = self.dependencies[n] - torm
 
     def addNl(self, rsrc):
-        return "".join(['"', "".join(rsrc.split(".")), '"'])
+        return "".join(['"', "\n".join(rsrc.split(".")), '"'])
 
     def dotml(self):
         print("digraph g {\n")
@@ -127,11 +128,10 @@ class DependencyExecutor:
             for n in s:
                 if len(str(n).split(".")) == 1:
                     continue
-                node = []
 
                 print("".join(self.addNl(k)), "->",
                       "".join(self.addNl(n)))
-                print("}")
+        print("}")
 
     def handleRetries(self, retries, rsrcKey):
         retries[rsrcKey] -= 1
