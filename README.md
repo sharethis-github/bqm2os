@@ -37,8 +37,9 @@ loaded to.
 
 # Example Usage
 # note: aws-login.sh before running
-export SRC_DIR='~/src'
+export SRC_DIR='/Users/xxx/src'
 ./run.sh bash
 cd /mnt/templates/bq/domo2
 python /python/bqm2.py --defaultProject sharethis.com:quixotic-spot-526 --defaultDataset domo2 --maxConcurrent 20 --maxRetry 100000 --execute .
+python /python/bqm2.py --defaultProject sharethis.com:quixotic-spot-526 --defaultDataset sop --maxConcurrent 20 --maxRetry 100000 --execute .
 python /python/bqm2.py  --varsFile=../thirdparty-mergelog-dynamic/global.vars --defaultProject sharethis.com:quixotic-spot-526 --defaultDataset domo2 --maxConcurrent 20 --maxRetry 100000 --execute .
