@@ -1,5 +1,6 @@
 FROM docker.io/stops/go-cloud-copy:98d373f20f as go-cloud-copy
 
+
 FROM python:3.6
 # /go-cloud-copy is a utility for sending receiving and sending messages from 
 # either stdin, stdout, or sqs queues. all combinations are supported.
