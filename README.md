@@ -58,6 +58,6 @@ The code auto detects if your file is json or flat file. For flat files, tsv is 
 export SRC_DIR='/Users/xxx/src' # DO NOT USE "~", IT WILL NOT WORK
 ./run.sh bash
 cd /mnt/templates/bq/domo2
-python /python/bqm2.py --defaultProject sharethis.com:quixotic-spot-526 --defaultDataset domo2 --maxConcurrent 20 --maxRetry 100000 --execute .
+python /python/bqm2.py --varsFile=../hll_sketches/global.vars --defaultProject sharethis.com:quixotic-spot-526 --defaultDataset domo2 --maxConcurrent 20 --maxRetry 100000 --execute .
 python /python/bqm2.py --defaultProject sharethis.com:quixotic-spot-526 --defaultDataset sop --maxConcurrent 20 --maxRetry 100000 --execute .
 python /python/bqm2.py  --varsFile=../thirdparty-mergelog-dynamic/global.vars --defaultProject sharethis.com:quixotic-spot-526 --defaultDataset domo2 --maxConcurrent 20 --maxRetry 100000 --execute .
