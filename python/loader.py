@@ -13,7 +13,7 @@ import tmplhelper
 from resource import Resource, _buildDataSetKey_, BqDatasetBackedResource, \
     BqJobs, BqQueryBackedTableResource, _buildDataSetTableKey_, \
     BqViewBackedTableResource, BqDataLoadTableResource, \
-    BqExtractTableResource, BqGcsTableLoadResource
+    BqExtractTableResource, BqGcsTableLoadResource, BqProcessTableResource
 from tmplhelper import evalTmplRecurse, explodeTemplate
 
 
@@ -124,16 +124,7 @@ class TableType(Enum):
     TABLE_GCS_LOAD = 4
     UNION_TABLE = 5
     UNION_VIEW = 6
-
-
-class BqUnionFileLoader(FileLoader):
-    def __init__(self):
-        pass
-
-    def load(self, file) -> Resource:
-        """ The resource loader will attempt to load the resources
-        which it handles from the file arg """
-        pass
+    BASH_TABLE = 7
 
 
 class BqQueryTemplatingFileLoader(FileLoader):
@@ -269,8 +260,6 @@ class BqQueryTemplatingFileLoader(FileLoader):
 
         elif self.tableType == TableType.TABLE_GCS_LOAD:
             jT = self.bqJobs.getJobForTable(bqTable)
-            uris = tuple([uri for uri in query.split("\n") if
-                          uri.startswith("gs://")])
 
             schema = None
             if "source_format" not in templateVars:
@@ -284,7 +273,7 @@ class BqQueryTemplatingFileLoader(FileLoader):
             rsrc = BqGcsTableLoadResource(bqTable,
                                           self.bqClient,
                                           self.gcsClient,
-                                          jT, uris, schema,
+                                          jT, query, schema,
                                           templateVars)
             out[key] = rsrc
         elif self.tableType == TableType.UNION_TABLE:
@@ -306,6 +295,15 @@ class BqQueryTemplatingFileLoader(FileLoader):
                 arsrc = BqViewBackedTableResource([query], bqTable,
                                                   self.bqClient)
                 out[key] = arsrc
+
+        elif self.tableType == TableType.BASH_TABLE:
+            jT = self.bqJobs.getJobForTable(bqTable)
+            with open(filePath + ".schema") as schemaFile:
+                schema = loadSchemaFromString(schemaFile.read().strip())
+            arsrc = BqProcessTableResource(query, bqTable, schema,
+                                           self.bqClient,
+                                           job=jT)
+            out[key] = arsrc
 
         dsetKey = _buildDataSetKey_(bqTable)
         if dsetKey not in out:

@@ -1,4 +1,5 @@
 atest2 depends on nothing
+atest2.bashtemplate depends on atest2 atest2.one
 atest2.before depends on atest2 atest2.one
 atest2.complex_json_data depends on atest2
 atest2.dash_named_table_dash_dash depends on atest2
@@ -7,7 +8,8 @@ atest2.extract_test_localdata_comma_no_header depends on atest2 atest2.test_loca
 atest2.extract_test_localdata_default depends on atest2 atest2.test_local_tabbed_data
 atest2.extract_test_localdata_json depends on atest2 atest2.test_local_tabbed_data
 atest2.extract_test_localdata_tab depends on atest2 atest2.test_local_tabbed_data
-atest2.load_three depends on extract.atest2.three
+atest2.jsonupload depends on atest2
+atest2.load_three depends on atest2 extract.atest2.three
 atest2.mergelog_mini_sample depends on atest2
 atest2.one depends on atest2 atest2.three atest2.two
 atest2.parquet_upload depends on nothing

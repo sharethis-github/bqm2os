@@ -6,10 +6,12 @@ from enum import Enum
 import hashlib
 from json.decoder import JSONDecodeError
 
+import subprocess
+
 from google.cloud import storage
 from google.cloud import bigquery
 from google.cloud.bigquery.client import Client
-from google.cloud.bigquery.dataset import Dataset, DatasetReference
+from google.cloud.bigquery.dataset import Dataset
 from google.cloud.bigquery.job import WriteDisposition, \
     QueryPriority, QueryJob, SourceFormat, \
     Compression, DestinationFormat, _AsyncJob, LoadJob, ExtractJob
@@ -146,7 +148,7 @@ class BqTables:
                     dsetMap[t.name] = t
                 if not iter.next_page_token:
                     break
-            if table.name in dsetMap:
+            if table.friendly_name in dsetMap:
                 return table
             else:
                 return None
@@ -261,6 +263,160 @@ def generate_file_md5(filename, blocksize=2**20):
     return m.hexdigest()
 
 
+class BqProcessTableResource(BqTableBasedResource):
+    """ todo: currently we block during the creation of this
+    table but we should probably treat this just like any table
+    create and put it in the background
+    """
+    def __init__(self, query: str, table: Table,
+                 schema: tuple, bqClient: Client,
+                 job: _AsyncJob):
+        """ """
+        super(BqProcessTableResource, self).__init__(table, bqClient)
+        self.query = query
+        self.table = table
+        self.bqClient = bqClient
+        self.schema = schema
+        self.job = job
+
+    def exists(self):
+        return self.table.exists()
+
+    def dependsOn(self, other: Resource):
+        return self.legacyBqQueryDependsOn(other)
+
+    def legacyBqQueryDependsOn(self, other: Resource):
+        if self == other:
+            return False
+
+        filtered = getFiltered(self.query)
+        if strictSubstring("".join(["", other.key(), " "]), filtered):
+            return True
+
+            # we need a better way!
+            # other may be simply a dataset in which case it will have not
+            # .query field
+        if isinstance(other, BqDatasetBackedResource) \
+                and strictSubstring(other.key(), self.key()):
+            return True
+        return False
+
+    def makeHashTag(self):
+
+        m = hashlib.md5()
+        m.update(self.query.encode("utf-8"))
+        return m.hexdigest()
+
+        return "filehash:" + generate_file_md5(self.file) + ":" + schemahash
+
+    def updateTime(self):
+        """ time in milliseconds.  None if not created """
+        self.table.reload()
+        createdTime = self.table.modified
+
+        print("created time is ", str(createdTime))
+        hashtag = self.makeHashTag()
+
+        if createdTime:
+
+            print("description is ", self.table.description)
+            # hijack this step to update description - ugh - debt supreme
+            if not self.table.description:
+                self.table.description = "\n".join(["Do not edit", hashtag])
+                self.table.update()
+            return int(createdTime.strftime("%s")) * 1000
+        return None
+
+    def create(self):
+        self.table.schema = self.schema
+
+        if self.exists():
+            print("Table exists and we're wiping out the description")
+            self.table.description = ""
+            self.table.update()
+
+        # we exec
+        import os
+
+        # pump the script into a file
+        # script name
+        script = "/tmp/" + _buildDataSetTableKey_(table=self.table)
+        with open(script, 'wb') as of:
+            of.write(bytearray(self.query, 'utf-8'))
+
+        os.chmod(script, 0o744)
+
+        datascript = script + ".data"
+        with open(datascript, 'wb') as writable:
+            with open(datascript + ".error", 'w') as errors:
+                try:
+                    fHandle = subprocess.Popen(script, stdout=writable,
+                                               stderr=errors)
+                except OSError as ose:
+                    logging.error(ose)
+                    return None
+
+                fHandle.wait()
+
+        if fHandle.returncode != 0:
+            err = open(datascript + ".error").read()
+            print("exit status != 0, got " + str(fHandle.returncode)
+                  + "error:" + err)
+            return None
+
+        # todo - allow caller to specify file delimiter
+        fieldDelimiter = '\t'
+        with open(datascript, 'r') as readable:
+            srcFormat = BqDataLoadTableResource.detectSourceFormat(
+                                                readable.readline())
+            if srcFormat != SourceFormat.CSV:
+                fieldDelimiter = None
+
+        with open(datascript, 'rb') as readable:
+            ret = self.table.upload_from_file(
+                readable, source_format=srcFormat,
+                field_delimiter=fieldDelimiter,
+                ignore_unknown_values=True,
+                write_disposition=WriteDisposition.WRITE_TRUNCATE,
+                job_name=str(uuid.uuid4()),
+                rewind=True
+            )
+
+        self.job = ret
+
+    def key(self):
+        return ".".join([self.table.dataset_id, self.table.table_id])
+
+    def isRunning(self):
+        return isJobRunning(self.job)
+
+    def __str__(self):
+        return "localdata:" + ".".join([self.table.dataset_id,
+                                        self.table.table_id])
+
+    def detectSourceFormat(firstFileLine: str):
+        try:
+            json.loads(firstFileLine)
+            return SourceFormat.NEWLINE_DELIMITED_JSON
+        except JSONDecodeError:
+            return SourceFormat.CSV
+
+    def __eq__(self, other):
+        try:
+            return self.query == other.query and self.key() == other.key()
+        except Exception:
+            return False
+
+    def shouldUpdate(self):
+        self.updateTime()
+        if not self.makeHashTag() in self.table.description:
+            return True
+        return False
+
+    def dump(self):
+        return self.query
+
+
 class BqDataLoadTableResource(BqTableBasedResource):
     """ todo: currently we block during the creation of this
     table but we should probably treat this just like any table
@@ -305,6 +461,10 @@ class BqDataLoadTableResource(BqTableBasedResource):
 
     def create(self):
         self.table.schema = self.schema
+
+        if self.exists():
+            self.table.description = ""
+            self.table.update()
 
         fieldDelimiter = '\t'
         with open(self.file, 'r') as readable:
@@ -428,19 +588,24 @@ class BqGcsTableLoadResource(BqTableBasedResource):
                  bqClient: Client,
                  gcsClient: storage.Client,
                  job: LoadJob,
-                 uris: tuple,
+                 query: str,
                  schema: tuple,
                  options: dict):
         super(BqGcsTableLoadResource, self)\
             .__init__(table, bqClient)
         self.job = job
         self.gcsClient = gcsClient,
-        self.uris = uris
+        self.query = query
         self.schema = schema
         self.options = options
+        self.uris = tuple([uri for uri in self.query.split("\n") if
+                          uri.startswith("gs://")])
 
     def isRunning(self):
         return isJobRunning(self.job)
+
+    def dump(self):
+        return str(self.uris)
 
     def create(self):
         jobid = "-".join(["create", self.table.dataset_id,
@@ -456,34 +621,22 @@ class BqGcsTableLoadResource(BqTableBasedResource):
         if self == other:
             return False
 
-        if not isinstance(other, BqExtractTableResource):
-            return False
-        # TODO: this is pretty janky but works (mostly) for now
-        me = set([self.uris[i] for i in range(len(self.uris))])
-        them = set(other.uris.split(","))
-        return len(me.intersection(them)) > 0
+        if isinstance(other, BqDatasetBackedResource) \
+                and strictSubstring(other.key(), self.key()):
+            return True
 
-    # we'll come back to this - Doug
-    # def updateTime(self):
-    #     objs = []
-    #     for uri in self.uris:
-    #         bucket, prefix = parseBucketAndPrefix(uri)
-    #         staridx = prefix.index(prefix, "*")
-    #         if staridx != -1:
-    #             prefix = prefix[:staridx]
-    #
-    #         files = [int(o.updated.timestamp() * 1000) for o in
-    #                 self.gcsClient.bucket(bucket).list_blobs(
-    #                 prefix=prefix)]
-    #         objs.append(files)
-    #
-    #
-    #     if not len(objs):
-    #         self.table.reload()
-    #         createdTime = self.table.modified
-    #         return int(createdTime.strftime("%s")) * 1000
-    #
-    #     return max(objs)
+        if not isinstance(other, BqExtractTableResource):
+            depends = self.legacyBqQueryDependsOn(other)
+            if depends:
+                return True
+
+        if isinstance(other, BqExtractTableResource):
+            # TODO: this is pretty janky but works (mostly) for now
+            me = set([self.uris[i] for i in range(len(self.uris))])
+            them = set(other.uris.split(","))
+            return len(me.intersection(them)) > 0
+
+        return False
 
     def shouldUpdate(self):
         return False
@@ -497,6 +650,18 @@ class BqGcsTableLoadResource(BqTableBasedResource):
             return self.key() == other.key() and self.uris == other.uris
         except Exception:
             return False
+
+    def legacyBqQueryDependsOn(self, other: Resource):
+        if self == other:
+            return False
+
+        gcsremoved = re.sub('^gs:.*$', "\n", self.query)
+        filtered = getFiltered(gcsremoved)
+
+        if strictSubstring("".join(["", other.key(), " "]), filtered):
+            return True
+
+        return False
 
 
 class BqQueryBasedResource(BqTableBasedResource):
@@ -719,7 +884,8 @@ def processExtractTableOptions(options: dict):
         job_config.field_delimiter = options['field_delimiter']
 
     if "print_header" in options:
-        job_config.field_delimiter = bool(options['print_header'])
+        job_config.print_header = bool(options['print_header'])
+
     return job_config
 
 
@@ -825,6 +991,7 @@ def export_data_to_gcs(dataset_name, table_name, destination):
 def isJobRunning(job):
     if not job:
         return False
+
     job.reload()
     print(job.job_id, job.state, job.errors)
     return job.running()

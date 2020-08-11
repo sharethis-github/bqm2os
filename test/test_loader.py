@@ -8,6 +8,7 @@ from google.cloud.storage import Client as GcsClient
 
 import mock
 from mock.mock import MagicMock
+import logging
 
 from loader import DelegatingFileSuffixLoader, FileLoader, \
     parseDatasetTable, \
@@ -332,6 +333,7 @@ class Test(unittest.TestCase):
         self.assertTrue(schema[0].name == "a")
 
     def testComplexLoadSchemaField(self):
+        log = logging.getLogger("TestLog")
         recordFields = [self.BuildJsonField("b", "float")]
         jsonFields = [
             self.BuildJsonField("c", "string", "repeated"),
@@ -340,13 +342,15 @@ class Test(unittest.TestCase):
                                           mode='repeated')]
         print (json.dumps(jsonFields))
         schema = loadSchemaFromString(json.dumps(jsonFields))
-        expectedStr = "[SchemaField('c', 'string', 'repeated', None, ()), " \
-                      "SchemaField('a', 'record', 'repeated', None, " \
-                      "(SchemaField('b', 'float', 'NULLABLE', None, ())," \
-                      "))]"
+        expectedStr = "[schemafield('c', 'string', 'repeated', none, (), none), schemafield('a', 'record', 'repeated', none, (schemafield('b', 'float', 'nullable', none, (), none),), none)]"
 
         actualStr = str(schema).lower()
+        log.info("actual string: " + actualStr)
+        log.info("expect string: " + expectedStr)
         self.assertEquals(expectedStr.lower(), actualStr)
 
 if __name__ == '__main__':
+    import sys
+    logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
+
     unittest.main()
