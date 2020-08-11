@@ -8,6 +8,7 @@ from json.decoder import JSONDecodeError
 
 import subprocess
 
+from google.api_core.exceptions import NotFound
 from google.cloud import storage
 from google.cloud import bigquery
 from google.cloud.bigquery.client import Client
@@ -280,7 +281,11 @@ class BqProcessTableResource(BqTableBasedResource):
         self.job = job
 
     def exists(self):
-        return self.table.exists()
+        try:
+            self.bqClient.get_table(self.table)
+            return True
+        except NotFound:
+            return False
 
     def dependsOn(self, other: Resource):
         return self.legacyBqQueryDependsOn(other)
@@ -372,17 +377,26 @@ class BqProcessTableResource(BqTableBasedResource):
             if srcFormat != SourceFormat.CSV:
                 fieldDelimiter = None
 
-        with open(datascript, 'rb') as readable:
-            ret = self.table.upload_from_file(
-                readable, source_format=srcFormat,
-                field_delimiter=fieldDelimiter,
-                ignore_unknown_values=True,
-                write_disposition=WriteDisposition.WRITE_TRUNCATE,
-                job_name=str(uuid.uuid4()),
-                rewind=True
-            )
+        job_config = bigquery.LoadJobConfig(
+            source_format=srcFormat,
+            fieldDelimiter=fieldDelimiter, ignore_unknown_values=True,
+            write_disposition=WriteDisposition.WRITE_TRUNCATE,
+            job_name=str(uuid.uuid4()),
+            schema=self.schema)
 
-        self.job = ret
+        with open(datascript, "rb") as source_file:
+            self.job = self.bqClient.load_table_from_file(source_file, self.table,
+                                              job_config=job_config)
+
+        # with open(datascript, 'rb') as readable:
+        #     ret = self.table.upload_from_file(
+        #         readable, source_format=srcFormat,
+        #         field_delimiter=fieldDelimiter,
+        #         ignore_unknown_values=True,
+        #         write_disposition=WriteDisposition.WRITE_TRUNCATE,
+        #         job_name=str(uuid.uuid4()),
+        #         rewind=True
+        #     )
 
     def key(self):
         return ".".join([self.table.dataset_id, self.table.table_id])
