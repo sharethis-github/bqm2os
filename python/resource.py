@@ -316,10 +316,11 @@ class BqProcessTableResource(BqTableBasedResource):
 
     def updateTime(self):
         """ time in milliseconds.  None if not created """
-        self.table.reload()
-        createdTime = self.table.modified
+        # self.table.reload() # reload was pre-sdk update
+        self.table = self.bqClient.get_table(self.table)
 
-        print("created time is ", str(createdTime))
+        print("created time is ", str(self.table.modified))
+        createdTime = self.table.modified
         hashtag = self.makeHashTag()
 
         if createdTime:
@@ -328,7 +329,7 @@ class BqProcessTableResource(BqTableBasedResource):
             # hijack this step to update description - ugh - debt supreme
             if not self.table.description:
                 self.table.description = "\n".join(["Do not edit", hashtag])
-                self.table.update()
+                self.bqClient.update_table(self.table, ["description"])
             return int(createdTime.strftime("%s")) * 1000
         return None
 
@@ -478,7 +479,7 @@ class BqDataLoadTableResource(BqTableBasedResource):
 
         if self.exists():
             self.table.description = ""
-            self.table.update()
+            self.bqClient.update_table(self.table, ["description"])
 
         fieldDelimiter = '\t'
         with open(self.file, 'r') as readable:
@@ -976,15 +977,15 @@ class BqExtractTableResource(Resource):
         return self.updateTime() < int(createdTime.strftime("%s")) * 1000
 
 
-def wait_for_job(job: QueryJob):
-    while True:
-        job.reload()  # Refreshes the state via a GET request.
-        print("waiting for job", job.name)
-        if job.state == 'DONE':
-            if job.error_result:
-                raise RuntimeError(job.errors)
-            return
-        time.sleep(1)
+# def wait_for_job(job: QueryJob):
+#     while True:
+#         job.reload()  # Refreshes the state via a GET request.
+#         print("waiting for job", job.name)
+#         if job.state == 'DONE':
+#             if job.error_result:
+#                 raise RuntimeError(job.errors)
+#             return
+#         time.sleep(1)
 
 
 def export_data_to_gcs(dataset_name, table_name, destination):
