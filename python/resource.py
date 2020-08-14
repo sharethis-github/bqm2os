@@ -386,8 +386,10 @@ class BqProcessTableResource(BqTableBasedResource):
             schema=self.schema)
 
         with open(datascript, "rb") as source_file:
-            self.job = self.bqClient.load_table_from_file(source_file, self.table,
-                                              job_config=job_config)
+            self.job \
+                = self.bqClient.load_table_from_file(source_file,
+                                                     self.table,
+                                                     job_config=job_config)
 
         # with open(datascript, 'rb') as readable:
         #     ret = self.table.upload_from_file(
