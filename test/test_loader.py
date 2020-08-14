@@ -8,6 +8,7 @@ from google.cloud.storage import Client as GcsClient
 
 import mock
 from mock.mock import MagicMock
+import logging
 
 from loader import DelegatingFileSuffixLoader, FileLoader, \
     parseDatasetTable, \
@@ -41,8 +42,8 @@ class Test(unittest.TestCase):
                                                     tableType: TableType,
                                                     theType):
 
-        bqClient.dataset('adataset').table('atable').name = 'atable'
-        bqClient.dataset('adataset').table('atable').dataset_name = \
+        bqClient.dataset('adataset').table('atable').table_id = 'atable'
+        bqClient.dataset('adataset').table('atable').dataset_id = \
             'adataset'
         bqClient.dataset('adataset').table('atable').project = 'aproject'
 
@@ -65,8 +66,8 @@ class Test(unittest.TestCase):
     def test_IdenticalButDuplicateDefinitionsAllowed(self, bqClient: Client, gcsClient: GcsClient,
                                                      bqJobs: BqJobs):
 
-        bqClient.dataset('adataset').table('atable').name = 'atable'
-        bqClient.dataset('adataset').table('atable').dataset_name = \
+        bqClient.dataset('adataset').table('atable').table_id = 'atable'
+        bqClient.dataset('adataset').table('atable').dataset_id = \
             'adataset'
         bqClient.dataset('adataset').table('atable').project = 'aproject'
 
@@ -86,8 +87,9 @@ class Test(unittest.TestCase):
     def test_NotIdenticalButDuplicateKeysAreNotAllowed(self, bqClient: Client, gcsClient: GcsClient,
                                                      bqJobs: BqJobs):
 
-        bqClient.dataset('adataset').table('atable').name = 'atable'
-        bqClient.dataset('adataset').table('atable').dataset_name = \
+        bqClient.dataset('adataset').table('atable').table_id = \
+            'atable'
+        bqClient.dataset('adataset').table('atable').dataset_id = \
             'adataset'
         bqClient.dataset('adataset').table('atable').project = 'aproject'
 
@@ -213,8 +215,9 @@ class Test(unittest.TestCase):
     @mock.patch('google.cloud.storage.Client')
     @mock.patch('resource.BqJobs')
     def testProcessTemplateVarUnionView(self, bqClient, bqJobs, gcsClient):
-        bqClient.dataset('adataset').table('atable').name = 'atable'
-        bqClient.dataset('adataset').table('atable').dataset_name = 'adataset'
+        bqClient.dataset('adataset').table('atable').table_id = 'atable'
+        bqClient.dataset('adataset').table('atable').dataset_id = \
+            'adataset'
         bqClient.dataset('adataset').table('atable').project = 'aproject'
         unionViewLoader = BqQueryTemplatingFileLoader(bqClient, gcsClient, bqJobs, TableType.UNION_VIEW,
                                             {'dataset': 'default', 'project': 'aproject'})
@@ -243,8 +246,9 @@ class Test(unittest.TestCase):
     @mock.patch('resource.BqJobs')
     def testProcessTemplateVarHappyPath(self, bqClient, bqJobs, gcsClient):
 
-        bqClient.dataset('adataset').table('atable').name = 'atable'
-        bqClient.dataset('adataset').table('atable').dataset_name = \
+        bqClient.dataset('adataset').table('atable').table_id = \
+            'atable'
+        bqClient.dataset('adataset').table('atable').dataset_id = \
             'adataset'
         bqClient.dataset('adataset').table('atable').project = 'aproject'
 
@@ -329,6 +333,7 @@ class Test(unittest.TestCase):
         self.assertTrue(schema[0].name == "a")
 
     def testComplexLoadSchemaField(self):
+        log = logging.getLogger("TestLog")
         recordFields = [self.BuildJsonField("b", "float")]
         jsonFields = [
             self.BuildJsonField("c", "string", "repeated"),
@@ -337,12 +342,15 @@ class Test(unittest.TestCase):
                                           mode='repeated')]
         print (json.dumps(jsonFields))
         schema = loadSchemaFromString(json.dumps(jsonFields))
-        expectedStr = "[SchemaField('c', 'string', 'repeated', None, ()), " \
-                      "SchemaField('a', 'record', 'repeated', None, " \
-                      "(SchemaField('b', 'float', 'NULLABLE', None, ()),))]"
+        expectedStr = "[schemafield('c', 'string', 'repeated', none, (), none), schemafield('a', 'record', 'repeated', none, (schemafield('b', 'float', 'nullable', none, (), none),), none)]"
 
-        actualStr = str(schema)
-        self.assertEquals(actualStr, expectedStr)
+        actualStr = str(schema).lower()
+        log.info("actual string: " + actualStr)
+        log.info("expect string: " + expectedStr)
+        self.assertEquals(expectedStr.lower(), actualStr)
 
 if __name__ == '__main__':
+    import sys
+    logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
+
     unittest.main()

@@ -7,6 +7,7 @@ from google.cloud.bigquery.table import Table
 from os.path import getmtime
 from enum import Enum
 from google.cloud import storage
+from google.cloud.exceptions import NotFound
 
 import tmplhelper
 from resource import Resource, _buildDataSetKey_, BqDatasetBackedResource, \
@@ -108,7 +109,10 @@ def cacheDataSet(bqClient: Client, bqTable: Table, datasets: dict):
     """
     dsetKey = _buildDataSetKey_(bqTable)
     if dsetKey not in datasets:
-        dataset = bqClient.dataset(bqTable.dataset_name, bqTable.project)
+        try:
+            dataset = bqClient.get_dataset(bqTable.dataset_id)
+        except NotFound:
+            dataset = bqClient.create_dataset(bqTable.dataset_id)
         datasets[dsetKey] = BqDatasetBackedResource(dataset, bqClient)
     return datasets[dsetKey]
 
@@ -257,8 +261,14 @@ class BqQueryTemplatingFileLoader(FileLoader):
         elif self.tableType == TableType.TABLE_GCS_LOAD:
             jT = self.bqJobs.getJobForTable(bqTable)
 
-            with open(filePath + ".schema") as schemaFile:
-                schema = loadSchemaFromString(schemaFile.read().strip())
+            schema = None
+            if "source_format" not in templateVars:
+                raise Exception("source_format not found in template vars")
+
+            if templateVars["source_format"] != "PARQUET":
+                with open(filePath + ".schema") as schemaFile:
+                    schema = loadSchemaFromString(schemaFile.read().strip())
+                    templateVars["schema"] = schema
 
             rsrc = BqGcsTableLoadResource(bqTable,
                                           self.bqClient,
@@ -301,7 +311,8 @@ class BqQueryTemplatingFileLoader(FileLoader):
                                         self.datasets)
 
         if prev and prev != out[key] and \
-                self.tableType != TableType.UNION_TABLE:
+                self.tableType not in set([TableType.UNION_TABLE,
+                                          TableType.UNION_VIEW]):
             raise Exception("Templating generated duplicate "
                             "tables outputs for " + filePath)
 

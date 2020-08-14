@@ -7,18 +7,20 @@ import hashlib
 from json.decoder import JSONDecodeError
 
 import subprocess
-from google.api.core.exceptions import NotFound
+
+from google.api_core.exceptions import NotFound
 from google.cloud import storage
+from google.cloud import bigquery
 from google.cloud.bigquery.client import Client
 from google.cloud.bigquery.dataset import Dataset
 from google.cloud.bigquery.job import WriteDisposition, \
     QueryPriority, QueryJob, SourceFormat, \
-    ExtractTableToStorageJob, Compression, \
-    DestinationFormat, LoadTableFromStorageJob, _AsyncJob
+    Compression, DestinationFormat, _AsyncJob, LoadJob, ExtractJob
 import time
-from google.cloud.bigquery.table import Table
+from google.cloud.bigquery.table import Table, TableReference
 import logging
-import io
+
+from google.cloud.exceptions import NotFound
 
 
 class Resource:
@@ -94,20 +96,24 @@ class BqJobs:
         return None
 
 
+def _buildFullyQualifiedTableName_(table: Table) -> str:
+    return "{}.{}.{}".format(table.project, table.dataset_id, table.table_id)
+
+
 def _buildDataSetKey_(table: Table) -> str:
     """
     :param table: a bq table
     :return: colon concatenated project, dataset
     """
-    return ":".join([table.dataset_name])
+    return ":".join([table.dataset_id])
 
 
-def _buildDataSetTableKey_(table: Table) -> str:
+def _buildDataSetTableKey_(table: TableReference) -> str:
     """
     :param table:
     :return: colon concatenated project,  dataset, tablename
     """
-    return ":".join([_buildDataSetKey_(table), table.name])
+    return ":".join([_buildDataSetKey_(table), table.table_id])
 
 
 class BqTables:
@@ -130,12 +136,12 @@ class BqTables:
         key = self.__dsetkey_(table)
         if key in self.datasetTableMap:
             dsetMap = self.datasetTableMap[key]
-            if table.name in dsetMap:
-                return dsetMap[table.name]
+            if table.table_id in dsetMap:
+                return dsetMap[table.table_id]
             else:
                 return None
         else:  # load dataset
-            iter = self.bqClient.dataset(table.dataset_name).list_tables()
+            iter = self.bqClient.dataset(table.dataset_id).list_tables()
             dsetMap = {}
             self.datasetTableMap[key] = dsetMap
             while True:
@@ -143,7 +149,7 @@ class BqTables:
                     dsetMap[t.name] = t
                 if not iter.next_page_token:
                     break
-            if table.name in dsetMap:
+            if table.friendly_name in dsetMap:
                 return table
             else:
                 return None
@@ -156,14 +162,17 @@ class BqDatasetBackedResource(Resource):
     """
     def __init__(self, dataset: Dataset,
                  bqClient: Client):
-        self.dataset = dataset
         self.bqClient = bqClient
-        self.existFlag = self.dataset.exists()
-        if self.existFlag:
-            self.dataset.reload()
+        self.existFlag = False
+        self.dataset = None
+        try:
+            self.dataset = bqClient.get_dataset(dataset)
+            self.existFlag = True
+        except NotFound:
+            pass
 
     def exists(self):
-        return self.dataset.exists()
+        return self.dataset is not None
 
     def updateTime(self):
         """ time in milliseconds.  None if not created """
@@ -173,10 +182,10 @@ class BqDatasetBackedResource(Resource):
         return None
 
     def create(self):
-        self.dataset.create()
+        self.dataset = self.bqClient.create_dataset(self.datasetReference)
 
     def key(self):
-        return self.dataset.name
+        return self.dataset.dataset_id
 
     def dependsOn(self, resource):
         return False
@@ -188,7 +197,7 @@ class BqDatasetBackedResource(Resource):
         return False
 
     def __str__(self):
-        return ":".join([self.dataset.project, self.dataset.name])
+        return ":".join([self.dataset.project, self.dataset.dataset_id])
 
     def __eq__(self, other):
         try:
@@ -211,11 +220,15 @@ class BqTableBasedResource(Resource):
         self.bqClient = bqClient
 
     def exists(self):
-        return self.table.exists()
+        try:
+            self.bqClient.get_table(self.table)
+            return True
+        except NotFound:
+            return False
 
     def updateTime(self):
         """ time in milliseconds.  None if not created """
-        self.table.reload()
+        self.table = self.bqClient.get_table(self.table)
         createdTime = self.table.modified
 
         if createdTime:
@@ -226,8 +239,8 @@ class BqTableBasedResource(Resource):
         raise Exception("implement")
 
     def key(self):
-        return ".".join([self.table.dataset_name,
-                         self.table.name])
+        return ".".join([self.table.dataset_id,
+                         self.table.table_id])
 
     def dependsOn(self, other: Resource):
         raise Exception("implement this function")
@@ -236,8 +249,8 @@ class BqTableBasedResource(Resource):
         raise Exception("implement this function")
 
     def __str__(self):
-        return ".".join([self.table.dataset_name,
-                         self.table.name, "${query}"])
+        return ".".join([self.table.dataset_id,
+                         self.table.table_id, "${query}"])
 
 
 def generate_file_md5(filename, blocksize=2**20):
@@ -268,7 +281,11 @@ class BqProcessTableResource(BqTableBasedResource):
         self.job = job
 
     def exists(self):
-        return self.table.exists()
+        try:
+            self.bqClient.get_table(self.table)
+            return True
+        except NotFound:
+            return False
 
     def dependsOn(self, other: Resource):
         return self.legacyBqQueryDependsOn(other)
@@ -299,10 +316,11 @@ class BqProcessTableResource(BqTableBasedResource):
 
     def updateTime(self):
         """ time in milliseconds.  None if not created """
-        self.table.reload()
-        createdTime = self.table.modified
+        # self.table.reload() # reload was pre-sdk update
+        self.table = self.bqClient.get_table(self.table)
 
-        print("created time is ", str(createdTime))
+        print("created time is ", str(self.table.modified))
+        createdTime = self.table.modified
         hashtag = self.makeHashTag()
 
         if createdTime:
@@ -311,7 +329,7 @@ class BqProcessTableResource(BqTableBasedResource):
             # hijack this step to update description - ugh - debt supreme
             if not self.table.description:
                 self.table.description = "\n".join(["Do not edit", hashtag])
-                self.table.update()
+                self.bqClient.update_table(self.table, ["description"])
             return int(createdTime.strftime("%s")) * 1000
         return None
 
@@ -360,27 +378,38 @@ class BqProcessTableResource(BqTableBasedResource):
             if srcFormat != SourceFormat.CSV:
                 fieldDelimiter = None
 
-        with open(datascript, 'rb') as readable:
-            ret = self.table.upload_from_file(
-                readable, source_format=srcFormat,
-                field_delimiter=fieldDelimiter,
-                ignore_unknown_values=True,
-                write_disposition=WriteDisposition.WRITE_TRUNCATE,
-                job_name=str(uuid.uuid4()),
-                rewind=True
-            )
+        job_config = bigquery.LoadJobConfig(
+            source_format=srcFormat,
+            fieldDelimiter=fieldDelimiter, ignore_unknown_values=True,
+            write_disposition=WriteDisposition.WRITE_TRUNCATE,
+            job_name=str(uuid.uuid4()),
+            schema=self.schema)
 
-        self.job = ret
+        with open(datascript, "rb") as source_file:
+            self.job \
+                = self.bqClient.load_table_from_file(source_file,
+                                                     self.table,
+                                                     job_config=job_config)
+
+        # with open(datascript, 'rb') as readable:
+        #     ret = self.table.upload_from_file(
+        #         readable, source_format=srcFormat,
+        #         field_delimiter=fieldDelimiter,
+        #         ignore_unknown_values=True,
+        #         write_disposition=WriteDisposition.WRITE_TRUNCATE,
+        #         job_name=str(uuid.uuid4()),
+        #         rewind=True
+        #     )
 
     def key(self):
-        return ".".join([self.table.dataset_name, self.table.name])
+        return ".".join([self.table.dataset_id, self.table.table_id])
 
     def isRunning(self):
         return isJobRunning(self.job)
 
     def __str__(self):
-        return "localdata:" + ".".join([self.table.dataset_name,
-                                        self.table.name])
+        return "localdata:" + ".".join([self.table.dataset_id,
+                                        self.table.table_id])
 
     def detectSourceFormat(firstFileLine: str):
         try:
@@ -422,7 +451,11 @@ class BqDataLoadTableResource(BqTableBasedResource):
         self.job = job
 
     def exists(self):
-        return self.table.exists()
+        try:
+            self.bqClient.get_table(self.table)
+            return True
+        except NotFound:
+            return False
 
     def makeHashTag(self):
         schemahash = generate_file_md5(self.file + ".schema")
@@ -430,7 +463,7 @@ class BqDataLoadTableResource(BqTableBasedResource):
 
     def updateTime(self):
         """ time in milliseconds.  None if not created """
-        self.table.reload()
+        self.table = self.bqClient.get_table(self.table)
         createdTime = self.table.modified
 
         hashtag = self.makeHashTag()
@@ -439,7 +472,7 @@ class BqDataLoadTableResource(BqTableBasedResource):
             # hijack this step to update description - ugh - debt supreme
             if not self.table.description:
                 self.table.description = "\n".join(["Do not edit", hashtag])
-                self.table.update()
+                self.bqClient.update_table(self.table, ["description"])
             return int(createdTime.strftime("%s")) * 1000
         return None
 
@@ -448,35 +481,42 @@ class BqDataLoadTableResource(BqTableBasedResource):
 
         if self.exists():
             self.table.description = ""
-            self.table.update()
+            self.bqClient.update_table(self.table, ["description"])
 
         fieldDelimiter = '\t'
         with open(self.file, 'r') as readable:
             srcFormat = BqDataLoadTableResource.detectSourceFormat(
                                                 readable.readline())
+
             if srcFormat != SourceFormat.CSV:
                 fieldDelimiter = None
 
+        job_config = bigquery.LoadJobConfig()
+        job_config.source_format = srcFormat
+        if srcFormat == SourceFormat.CSV:
+            job_config.skip_leading_rows = 1
+        job_config.autodetect = True
+
         with open(self.file, 'rb') as readable:
-            ret = self.table.upload_from_file(
-                readable, source_format=srcFormat,
-                field_delimiter=fieldDelimiter,
-                ignore_unknown_values=True,
-                write_disposition=WriteDisposition.WRITE_TRUNCATE)
-            self.job = ret
+            job = self.bqClient.load_table_from_file(
+                readable,
+                self.table,
+                job_config=job_config
+                )
+        self.job = job
 
     def key(self):
-        return ".".join([self.table.dataset_name, self.table.name])
+        return ".".join([self.table.dataset_id, self.table.table_id])
 
     def dependsOn(self, resource: Resource):
-        return self.table.dataset_name == resource.key()
+        return self.table.dataset_id == resource.key()
 
     def isRunning(self):
         return isJobRunning(self.job)
 
     def __str__(self):
-        return "localdata:" + ".".join([self.table.dataset_name,
-                                        self.table.name])
+        return "localdata:" + ".".join([self.table.dataset_id,
+                                        self.table.table_id])
 
     def detectSourceFormat(firstFileLine: str):
         try:
@@ -498,18 +538,28 @@ class BqDataLoadTableResource(BqTableBasedResource):
         return False
 
 
-def processLoadTableOptions(options: dict, job: LoadTableFromStorageJob):
+def processLoadTableOptions(options: dict):
     """
     :param options: A dictionary of options matching fields available
      on LoadTableFromStorageJob
     :param job: An instance of LoadTableFromStorageJob
     :return: None - simply decorates the job
     """
+    print(options)
+    job_config = bigquery.LoadJobConfig()
+    job_config.source_format = DestinationFormat.NEWLINE_DELIMITED_JSON
+    job_config.ignore_unknown_values = True
+    job_config.write_disposition = WriteDisposition.WRITE_TRUNCATE
+
+    if "schema" in options:
+        job_config.schema = options["schema"]
+
     formats = {
         "AVRO": SourceFormat.AVRO,
         "NEWLINE_DELIMITED_JSON": SourceFormat.NEWLINE_DELIMITED_JSON,
         "CSV": SourceFormat.CSV,
-        "DATASTORE_BACKUP": SourceFormat.DATASTORE_BACKUP
+        "DATASTORE_BACKUP": SourceFormat.DATASTORE_BACKUP,
+        "PARQUET": bigquery.SourceFormat.PARQUET
     }
 
     if "source_format" in options:
@@ -517,13 +567,16 @@ def processLoadTableOptions(options: dict, job: LoadTableFromStorageJob):
         if value not in formats:
             raise KeyError("Please use only one of the following: "
                            + ",".join(formats.keys()))
-        job.source_format = formats[value]
+        if value != "PARQUET":
+            job_config.max_bad_records = 1000
+        job_config.source_format = formats[value]
 
     if "max_bad_records" in options:
-        job.max_bad_records = int(options['max_bad_records'])
+        job_config.max_bad_records = int(options['max_bad_records'])
 
     if 'ignore_unknown_values' in options:
-        job.ignore_unknown_values = bool(options['ignore_unknown_values'])
+        job_config.ignore_unknown_values = \
+                bool(options['ignore_unknown_values'])
 
     write_disp = {
         "WRITE_APPEND": WriteDisposition.WRITE_APPEND,
@@ -536,13 +589,14 @@ def processLoadTableOptions(options: dict, job: LoadTableFromStorageJob):
         if value not in write_disp:
             raise KeyError("Please use only one of the following: "
                            + ",".join(write_disp.keys()))
-        job.write_disposition = write_disp[options['write_disposition']]
+        job_config.write_disposition = write_disp[options['write_disposition']]
 
     if 'field_delimiter' in options:
-        job.field_delimiter = options['field_delimiter']
+        job_config.field_delimiter = options['field_delimiter']
 
     if 'skip_leading_rows' in options:
-        job.skip_leading_rows = int(options["skip_leading_rows"])
+        job_config.skip_leading_rows = int(options["skip_leading_rows"])
+    return job_config
 
 
 class BqGcsTableLoadResource(BqTableBasedResource):
@@ -550,7 +604,7 @@ class BqGcsTableLoadResource(BqTableBasedResource):
     def __init__(self, table: Table,
                  bqClient: Client,
                  gcsClient: storage.Client,
-                 job: LoadTableFromStorageJob,
+                 job: LoadJob,
                  query: str,
                  schema: tuple,
                  options: dict):
@@ -571,18 +625,14 @@ class BqGcsTableLoadResource(BqTableBasedResource):
         return str(self.uris)
 
     def create(self):
-        jobid = "-".join(["create", self.table.dataset_name,
-                          self.table.name, str(uuid.uuid4())])
-        self.job = LoadTableFromStorageJob(jobid, self.table,
-                                           self.uris,
-                                           self.bqClient,
-                                           self.schema)
-        self.job.source_format = DestinationFormat.NEWLINE_DELIMITED_JSON
-        self.job.ignore_unknown_values = True
-        self.job.max_bad_records = 1000
-        self.job.write_disposition = WriteDisposition.WRITE_TRUNCATE
-        processLoadTableOptions(self.options, self.job)
-        self.job.begin()
+        jobid = "-".join(["create", self.table.dataset_id,
+                          self.table.table_id, str(uuid.uuid4())])
+        self.job = self.bqClient.load_table_from_uri(
+                self.uris,
+                self.table,
+                jobid,
+                job_config=processLoadTableOptions(self.options)
+                )
 
     def dependsOn(self, other: Resource):
         if self == other:
@@ -609,8 +659,8 @@ class BqGcsTableLoadResource(BqTableBasedResource):
         return False
 
     def key(self):
-        return ".".join([self.table.dataset_name,
-                         self.table.name])
+        return ".".join([self.table.dataset_id,
+                         self.table.table_id])
 
     def __eq__(self, other):
         try:
@@ -657,7 +707,8 @@ class BqQueryBasedResource(BqTableBasedResource):
 
     def updateTime(self):
         """ time in milliseconds.  None if not created """
-        self.table.reload()
+        self.table = self.bqClient.get_table(self.table)
+
         createdTime = self.table.modified
 
         if createdTime:
@@ -672,7 +723,10 @@ class BqQueryBasedResource(BqTableBasedResource):
                        "Do not edit", "",
                        self.makeQueryHashTag()]
                 self.table.description = "\n".join(msg)
-                self.table.update()
+                self.table = self.bqClient.update_table(
+                        self.table,
+                        ["description"]
+                        )
             return int(createdTime.strftime("%s")) * 1000
         return None
 
@@ -680,8 +734,8 @@ class BqQueryBasedResource(BqTableBasedResource):
         raise Exception("implement")
 
     def key(self):
-        return ".".join([self.table.dataset_name,
-                         self.table.name])
+        return ".".join([self.table.dataset_id,
+                         self.table.table_id])
 
     def dependsOn(self, other: Resource):
         return self.legacyBqQueryDependsOn(other)
@@ -724,18 +778,28 @@ class BqQueryBasedResource(BqTableBasedResource):
 
 
 class BqViewBackedTableResource(BqQueryBasedResource):
+
+    def tableExists(self):
+        try:
+            self.bqClient.get_table(self.table)
+            return True
+        except NotFound:
+            return False
+
     def create(self):
         try:
-            if (self.table.exists()):
-                self.table.delete()
-                self.table = Table(self.table.name,
+            if (self.tableExists()):
+
+                table_id = _buildFullyQualifiedTableName_(self.table)
+                self.bqClient.delete_table(table_id, not_found_ok=True)
+                self.table = Table(self.table.table_id,
                                    self.bqClient.dataset(
-                                       self.table.dataset_name,
+                                       self.table.dataset_id,
                                        self.table.project))
 
             self.table.view_query = self.makeFinalQuery()
             self.table.schema = []
-            self.table.create()
+            self.table = self.bqClient.create_table(self.table)
         except NotFound:
             # fail loading - exists will fail
             # and we'll retry and after
@@ -767,51 +831,59 @@ class BqQueryBackedTableResource(BqQueryBasedResource):
             .__init__(query, table, bqClient)
         self.queryJob = queryJob
 
-    def create(self):
-        if self.table.exists():
-            self.table.delete()
+    def tableExists(self):
+        try:
+            self.bqClient.get_table(self.table)
+            return True
+        except NotFound:
+            return False
 
-        jobid = "-".join(["create", self.table.dataset_name,
-                          self.table.name, str(uuid.uuid4())])
-        query_job = self.bqClient.run_async_query(jobid, self.makeFinalQuery())
-        query_job.allow_large_results = True
-        query_job.flatten_results = False
-        query_job.destination = self.table
-        query_job.priority = QueryPriority.INTERACTIVE
-        query_job.write_disposition = WriteDisposition.WRITE_TRUNCATE
-        query_job.maximum_billing_tier = 2
-        query_job.begin()
-        self.queryJob = query_job
+    def create(self):
+        if self.tableExists():
+            table_id = _buildFullyQualifiedTableName_(self.table)
+            self.bqClient.delete_table(table_id, not_found_ok=True)
+        jobid = "-".join(["create", self.table.dataset_id,
+                          self.table.table_id, str(uuid.uuid4())])
+        use_legacy_sql = "#standardsql" not in self.makeFinalQuery().lower()
+        job_config = bigquery.QueryJobConfig()
+        job_config.allow_large_results = True
+        job_config.flatten_results = False
+        job_config.use_legacy_sql = use_legacy_sql
+        job_config.destination = self.table
+        job_config.priority = QueryPriority.INTERACTIVE
+        job_config.write_disposition = WriteDisposition.WRITE_TRUNCATE
+        job_config.maximum_billing_tier = 2
+
+        self.queryJob = self.bqClient.query(
+            self.makeFinalQuery(),
+            job_config=job_config,
+            job_id=jobid
+        )
 
     def key(self):
-        return ".".join([self.table.dataset_name, self.table.name])
+        return ".".join([self.table.dataset_id, self.table.table_id])
 
     def isRunning(self):
-        if self.queryJob:
-            self.queryJob.reload()
-            print(self.queryJob.name,
-                  self.queryJob.state, self.queryJob.errors)
-            return self.queryJob.state in ['RUNNING', 'PENDING']
-        else:
-            return False
+        return isJobRunning(self.queryJob)
 
     def dump(self):
         return self.makeFinalQuery()
 
 
-def processExtractTableOptions(options: dict,
-                               job: ExtractTableToStorageJob):
+def processExtractTableOptions(options: dict):
     compressions = {
         "GZIP": Compression.GZIP,
         "NONE": Compression.NONE,
     }
+
+    job_config = bigquery.job.ExtractJobConfig()
 
     if "compression" in options:
         value = options["compression"]
         if value not in compressions:
             raise KeyError("Please specify only one of " +
                            compressions.keys())
-        job.compression = compressions[value]
+        job_config.compression = compressions[value]
 
     formats = {
         "NEWLINE_DELIMITED_JSON": DestinationFormat.NEWLINE_DELIMITED_JSON,
@@ -823,13 +895,15 @@ def processExtractTableOptions(options: dict,
         value = options['destination_format']
         if value not in formats:
             raise KeyError("Please specify only one of " + formats.keys())
-        job.destination_format = formats[value]
+        job_config.destination_format = formats[value]
 
     if "field_delimiter" in options:
-        job.field_delimiter = options['field_delimiter']
+        job_config.field_delimiter = options['field_delimiter']
 
     if "print_header" in options:
-        job.print_header = bool(options['print_header'])
+        job_config.print_header = bool(options['print_header'])
+
+    return job_config
 
 
 class BqExtractTableResource(Resource):
@@ -837,7 +911,7 @@ class BqExtractTableResource(Resource):
                  table: Table,
                  bqClient: Client,
                  gcsClient: storage.Client,
-                 extractJob: ExtractTableToStorageJob,
+                 extractJob: ExtractJob,
                  uris: str,
                  options: dict):
 
@@ -851,30 +925,25 @@ class BqExtractTableResource(Resource):
         self.options = options
 
     def create(self):
-        jobid = "-".join(["extract", self.table.name,
-                          self.table.name, str(uuid.uuid4())])
-        self.extractJob = self.bqClient.extract_table_to_storage(jobid,
-                                                                 self.table,
-                                                                 self.uris)
-        processExtractTableOptions(self.options, self.extractJob)
-        self.extractJob.begin()
+        jobid = "-".join(["extract", self.table.table_id,
+                          self.table.table_id, str(uuid.uuid4())])
+        self.extractJob = self.bqClient.extract_table(
+                self.table,
+                self.uris,
+                jobid,
+                job_config=processExtractTableOptions(self.options)
+                )
 
     def key(self):
-        return ".".join(["extract", self.table.dataset_name,
-                         self.table.name])
+        return ".".join(["extract", self.table.dataset_id,
+                         self.table.table_id])
 
     def isRunning(self):
-        if self.extractJob:
-            self.extractJob.reload()
-            print(self.extractJob.name,
-                  self.extractJob.state, self.extractJob.errors)
-            return self.extractJob.state in ['RUNNING', 'PENDING']
-        else:
-            return False
+        return isJobRunning(self.extractJob)
 
     def __str__(self):
-        return "extract:" + ".".join([self.table.dataset_name,
-                                     self.table.name])
+        return "extract:" + ".".join([self.table.dataset_id,
+                                     self.table.table_id])
 
     def exists(self):
         return gcsExists(self.gcsClient, self.uris)
@@ -902,7 +971,7 @@ class BqExtractTableResource(Resource):
         return max(objs)
 
     def shouldUpdate(self):
-        self.table.reload()
+        self.table = self.bqClient.get_table(self.table)
         createdTime = self.table.modified
         if not createdTime:
             return False
@@ -910,15 +979,15 @@ class BqExtractTableResource(Resource):
         return self.updateTime() < int(createdTime.strftime("%s")) * 1000
 
 
-def wait_for_job(job: QueryJob):
-    while True:
-        job.reload()  # Refreshes the state via a GET request.
-        print("waiting for job", job.name)
-        if job.state == 'DONE':
-            if job.error_result:
-                raise RuntimeError(job.errors)
-            return
-        time.sleep(1)
+# def wait_for_job(job: QueryJob):
+#     while True:
+#         job.reload()  # Refreshes the state via a GET request.
+#         print("waiting for job", job.name)
+#         if job.state == 'DONE':
+#             if job.error_result:
+#                 raise RuntimeError(job.errors)
+#             return
+#         time.sleep(1)
 
 
 def export_data_to_gcs(dataset_name, table_name, destination):
@@ -930,7 +999,6 @@ def export_data_to_gcs(dataset_name, table_name, destination):
     job = bigquery_client.extract_table_to_storage(
         job_name, table, destination)
 
-    job.begin()
     job.result()  # Wait for job to complete
 
     print('Exported {}:{} to {}'.format(
@@ -938,12 +1006,12 @@ def export_data_to_gcs(dataset_name, table_name, destination):
 
 
 def isJobRunning(job):
-    if job:
-        job.reload()
-        print(job.name, job.state, job.errors)
-        return job.state in ['RUNNING', 'PENDING']
-    else:
+    if not job:
         return False
+
+    job.reload()
+    print(job.job_id, job.state, job.errors)
+    return job.running()
 
 
 def parseBucketAndPrefix(uris):
