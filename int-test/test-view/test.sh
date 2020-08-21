@@ -7,5 +7,4 @@ cd $(dirname $0)
 
 python /python/bqm2.py --defaultProject api-project-dev-1212 --defaultDataset ${dataset} --execute .
 
-gcloud config set account api-project-dev-1212
 bq show --project_id api-project-dev-1212 ${dataset}.test_view | grep VIEW > /dev/null 2>&1

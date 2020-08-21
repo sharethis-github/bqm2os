@@ -21,4 +21,7 @@ python /python/bqm2.py --defaultDataset ${dataset} --execute int-test/bq/
 echo 'c	d	e' >> int-test/bq/test_local_json_data.localdata
 python /python/bqm2.py --defaultDataset ${dataset} --execute int-test/bq/
 
+gcloud auth activate-service-account --key-file $GOOGLE_APPLICATION_CREDENTIALS
+gcloud config set account api-project-dev-1212
+
 dataset=$dataset /int-test/test-view/test.sh
