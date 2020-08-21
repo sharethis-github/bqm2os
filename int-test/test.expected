@@ -21,7 +21,6 @@ atest2.test_local_tabbed_data depends on atest2
 atest2.test_unionview depends on atest2 atest2.test_ab atest2.test_cd
 atest2.three depends on atest2
 atest2.two depends on atest2
-atest2.url_expanded_kw depends on atest2 atest2.mergelog_mini_sample
 extract.atest2.extract_test_localdata_comma depends on atest2.extract_test_localdata_comma
 extract.atest2.extract_test_localdata_comma_no_header depends on atest2.extract_test_localdata_comma_no_header
 extract.atest2.extract_test_localdata_default depends on atest2.extract_test_localdata_default

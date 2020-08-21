@@ -1,25 +1,19 @@
-import json
-import uuid
-import re
-from enum import Enum
-
 import hashlib
+import json
+import logging
+import re
+import subprocess
+import uuid
 from json.decoder import JSONDecodeError
 
-import subprocess
-
-from google.api_core.exceptions import NotFound
-from google.cloud import storage
 from google.cloud import bigquery
+from google.cloud import storage
 from google.cloud.bigquery.client import Client
 from google.cloud.bigquery.dataset import Dataset
 from google.cloud.bigquery.job import WriteDisposition, \
     QueryPriority, QueryJob, SourceFormat, \
     Compression, DestinationFormat, _AsyncJob, LoadJob, ExtractJob
-import time
 from google.cloud.bigquery.table import Table, TableReference
-import logging
-
 from google.cloud.exceptions import NotFound
 
 
@@ -788,17 +782,14 @@ class BqViewBackedTableResource(BqQueryBasedResource):
 
     def create(self):
         try:
+            table_id = _buildFullyQualifiedTableName_(self.table)
+
             if (self.tableExists()):
-
-                table_id = _buildFullyQualifiedTableName_(self.table)
                 self.bqClient.delete_table(table_id, not_found_ok=True)
-                self.table = Table(self.table.table_id,
-                                   self.bqClient.dataset(
-                                       self.table.dataset_id,
-                                       self.table.project))
 
+            self.table = Table(table_id)
             self.table.view_query = self.makeFinalQuery()
-            self.table.schema = []
+            self.table.schema = None
             self.table = self.bqClient.create_table(self.table)
         except NotFound:
             # fail loading - exists will fail
