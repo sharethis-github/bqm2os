@@ -22,7 +22,7 @@ echo 'c	d	e' >> int-test/bq/test_local_json_data.localdata
 python /python/bqm2.py --defaultDataset ${dataset} --execute int-test/bq/
 
 # commenting this out because integration test is failing
-return
+exit
 
 echo activating account
 gcloud auth activate-service-account --key-file $GOOGLE_APPLICATION_CREDENTIALS
