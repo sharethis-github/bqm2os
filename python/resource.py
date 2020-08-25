@@ -333,7 +333,7 @@ class BqProcessTableResource(BqTableBasedResource):
         if self.exists():
             print("Table exists and we're wiping out the description")
             self.table.description = ""
-            self.table.update()
+            self.bqClient.update_table(self.table, ["description"])
 
         # we exec
         import os
