@@ -487,6 +487,7 @@ class BqDataLoadTableResource(BqTableBasedResource):
 
         job_config = bigquery.LoadJobConfig()
         job_config.source_format = srcFormat
+        job_config.schema = self.table.schema
         if srcFormat == SourceFormat.CSV:
             job_config.skip_leading_rows = 1
         job_config.autodetect = True
