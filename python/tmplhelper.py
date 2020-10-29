@@ -90,7 +90,7 @@ def handleDateField(dt: datetime, val, format) -> str:
 
     :return: array of (quasi) date strings
     """
-        
+
     assert isinstance(dt, datetime)
     dates = []
     if isinstance(val, list) and len(val) == 2:
@@ -116,7 +116,8 @@ def explodeTemplate(templateVars: dict):
     :return:
     """
 
-    # check for key with yyyymm, yyyymmdd, or yyyymmddhh and handle it specially
+    # check for key with yyyymm, yyyymmdd, or yyyymmddhh
+    # and handle it specially
     for (k, v) in templateVars.items():
         if 'yyyymm' == k or 'yyyymmddhh' == k:
             templateVars[k] = handleDateField(datetime.now(), v, k)
