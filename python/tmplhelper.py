@@ -1,5 +1,6 @@
 import string
 from datetime import datetime, timedelta
+from dateutil.relativedelta import relativedelta
 
 
 def evalTmplRecurse(templateKeys: dict):
@@ -82,6 +83,31 @@ def handleDayDateField(dt: datetime, val) -> str:
     return sorted([dt.strftime("%Y%m%d") for dt in toFormat])
 
 
+def handleDateField(dt: datetime, val, format) -> str:
+    """
+    val is a 2 element array like [-1,-2]
+    format is "yyyymm" or "yyyymmddhh"
+
+    :return: array of (quasi) date strings
+    """
+        
+    assert isinstance(dt, datetime)
+    dates = []
+    if isinstance(val, list) and len(val) == 2:
+        val = sorted([int(x) for x in val])
+        for v in range(int(val[0]), int(val[1]) + 1):
+            if format == "yyyymm":
+                date = (dt + relativedelta(months=v)).strftime("%Y%m")
+            elif format == "yyyymmddhh":
+                date = (dt + timedelta(hours=v)).strftime("%Y%m%d%H")
+            dates.append(date)
+    else:
+        raise Exception("Invalid datetime values to fill out.  Must "
+                        "be 2 element array of ints")
+
+    return sorted(dates)
+
+
 def explodeTemplate(templateVars: dict):
     """
     Goal of this method is simply to replace
@@ -89,10 +115,13 @@ def explodeTemplate(templateVars: dict):
 
     :return:
     """
-    # check for key with yyyymmdd and handle it specially
+
+    # check for key with yyyymm, yyyymmdd, or yyyymmddhh and handle it specially
     for (k, v) in templateVars.items():
-        if 'yyyymmdd' in k:
+        if 'yyyymmdd' == k:
             templateVars[k] = handleDayDateField(datetime.today(), v)
+        elif 'yyyymm' == k or 'yyyymmddhh' == k:
+            templateVars[k] = handleDateField(datetime.now(), v, k)
 
     topremute = []
     for (k, v) in templateVars.items():
