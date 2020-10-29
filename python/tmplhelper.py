@@ -118,10 +118,10 @@ def explodeTemplate(templateVars: dict):
 
     # check for key with yyyymm, yyyymmdd, or yyyymmddhh and handle it specially
     for (k, v) in templateVars.items():
-        if 'yyyymmdd' == k:
-            templateVars[k] = handleDayDateField(datetime.today(), v)
-        elif 'yyyymm' == k or 'yyyymmddhh' == k:
+        if 'yyyymm' == k or 'yyyymmddhh' == k:
             templateVars[k] = handleDateField(datetime.now(), v, k)
+        elif 'yyyymmdd' in k:
+            templateVars[k] = handleDayDateField(datetime.today(), v)
 
     topremute = []
     for (k, v) in templateVars.items():
