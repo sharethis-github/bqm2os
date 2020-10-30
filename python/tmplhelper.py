@@ -64,15 +64,15 @@ def handleDateField(dt: datetime, val, key) -> str:
     :return:
     """
 
-    if key == "yyyy":
+    if key.endswith("yyyy"):
         func = relativedelta
         param = "years"
         format = "%Y"
-    elif key == "yyyymm":
+    elif key.endswith("yyyymm"):
         func = relativedelta
         param = "months"
         format = "%Y%m"
-    elif key == "yyyymmddhh":
+    elif key.endswith("yyyymmddhh"):
         func = timedelta
         param = "hours"
         format = "%Y%m%d%H"
