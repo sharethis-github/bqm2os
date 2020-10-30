@@ -53,26 +53,45 @@ def keysOfTemplate(strr):
     return set([x[1] for x in string.Formatter().parse(strr) if x[1]])
 
 
-def handleDayDateField(dt: datetime, val) -> str:
+def handleDateField(dt: datetime, val, key) -> str:
     """
     val can be a string in which case we return it
     it can be an int in which case we evaluate it as a date that
-    many days in the future or ago
+    many years/months/days/hours in the future or ago
 
     We may get more complicated in the future to support ranges, etc
 
     :return:
     """
 
+    if key == "yyyy":
+        func = relativedelta
+        param = "years"
+        format = "%Y"
+    elif key == "yyyymm":
+        func = relativedelta
+        param = "months"
+        format = "%Y%m"
+    elif key == "yyyymmddhh":
+        func = timedelta
+        param = "hours"
+        format = "%Y%m%d%H"
+    else:
+        func = timedelta
+        param = "days"
+        format = "%Y%m%d"
+
     assert isinstance(dt, datetime)
     toFormat = []
     if isinstance(val, int):
-        newdate = dt + timedelta(days=val)
+        params = {param: val}
+        newdate = dt + func(**params)
         toFormat.append(newdate)
     elif isinstance(val, list) and len(val) == 2:
         val = sorted([int(x) for x in val])
         for v in range(int(val[0]), int(val[1]) + 1):
-            newdate = dt + timedelta(days=v)
+            params = {param: v}
+            newdate = dt + func(**params)
             toFormat.append(newdate)
     elif isinstance(val, str):
         return [val]
@@ -80,32 +99,8 @@ def handleDayDateField(dt: datetime, val) -> str:
         raise Exception("Invalid datetime values to fill out.  Must "
                         "be int or 2 element array of ints")
 
-    return sorted([dt.strftime("%Y%m%d") for dt in toFormat])
+    return sorted([dt.strftime(format) for dt in toFormat])
 
-
-def handleDateField(dt: datetime, val, format) -> str:
-    """
-    val is a 2 element array like [-1,-2]
-    format is "yyyymm" or "yyyymmddhh"
-
-    :return: array of (quasi) date strings
-    """
-
-    assert isinstance(dt, datetime)
-    dates = []
-    if isinstance(val, list) and len(val) == 2:
-        val = sorted([int(x) for x in val])
-        for v in range(int(val[0]), int(val[1]) + 1):
-            if format == "yyyymm":
-                date = (dt + relativedelta(months=v)).strftime("%Y%m")
-            elif format == "yyyymmddhh":
-                date = (dt + timedelta(hours=v)).strftime("%Y%m%d%H")
-            dates.append(date)
-    else:
-        raise Exception("Invalid datetime values to fill out.  Must "
-                        "be 2 element array of ints")
-
-    return sorted(dates)
 
 
 def explodeTemplate(templateVars: dict):
@@ -119,10 +114,8 @@ def explodeTemplate(templateVars: dict):
     # check for key with yyyymm, yyyymmdd, or yyyymmddhh
     # and handle it specially
     for (k, v) in templateVars.items():
-        if 'yyyymm' == k or 'yyyymmddhh' == k:
+        if 'yyyy' in k:
             templateVars[k] = handleDateField(datetime.now(), v, k)
-        elif 'yyyymmdd' in k:
-            templateVars[k] = handleDayDateField(datetime.today(), v)
 
     topremute = []
     for (k, v) in templateVars.items():
