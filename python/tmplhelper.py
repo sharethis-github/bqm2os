@@ -102,7 +102,6 @@ def handleDateField(dt: datetime, val, key) -> str:
     return sorted([dt.strftime(format) for dt in toFormat])
 
 
-
 def explodeTemplate(templateVars: dict):
     """
     Goal of this method is simply to replace

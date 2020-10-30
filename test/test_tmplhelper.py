@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 
 from frozendict import frozendict
 
-from tmplhelper import explodeTemplate, handleDayDateField, evalTmplRecurse
+from tmplhelper import explodeTemplate, handleDateField, evalTmplRecurse
 
 
 class Test(unittest.TestCase):
@@ -105,20 +105,19 @@ class Test(unittest.TestCase):
 
     def testHandleDayDateFieldIntFormat(self):
         d = datetime.strptime('20051231', '%Y%m%d')
-        result = handleDayDateField(d, -1)
+        result = handleDateField(d, -1, "yyyyddmm")
         expected = ['20051230']
         self.assertEqual(result, expected)
 
     def testHandleDayDateFieldIntArrayFormat(self):
         d = datetime.strptime('20051231', '%Y%m%d')
-        result = handleDayDateField(d, [-1, -3])
+        result = handleDateField(d, [-1, -3], "yyyyddmm")
         expected = sorted(['20051230', '20051229', '20051228'])
         self.assertEqual(result, expected)
 
     def testHandleDayDateFieldIntStringArrayFormat(self):
         d = datetime.strptime('20051231', '%Y%m%d')
-        result = handleDayDateField(d, ["-1",
-                                        -3])
+        result = handleDateField(d, ["-1", -3], "yyyyddmm")
         expected = sorted(['20051230', '20051229', '20051228'])
         self.assertEqual(result, expected)
 
