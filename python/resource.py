@@ -4,6 +4,7 @@ import logging
 import re
 import subprocess
 import uuid
+from datetime import datetime, timedelta
 from json.decoder import JSONDecodeError
 
 from google.cloud import bigquery
@@ -16,7 +17,6 @@ from google.cloud.bigquery.job import WriteDisposition, \
 from google.cloud.bigquery.table import Table, TableReference
 from google.cloud.exceptions import NotFound
 
-from datetime import datetime, timedelta
 
 class Resource:
     def exists(self):
@@ -856,10 +856,13 @@ class BqQueryBackedTableResource(BqQueryBasedResource):
 
         if self.expiration > 0:
             def done_callback(future):
-              table_path = ".".join([self.table.project, self.table.dataset_id, self.table.table_id])
-              table = self.bqClient.get_table(table_path)
-              table.expires = datetime.now() + timedelta(days=self.expiration)
-              self.bqClient.update_table(table, ['expires'])
+                table_path = ".".join([self.table.project,
+                                      self.table.dataset_id,
+                                      self.table.table_id])
+                table = self.bqClient.get_table(table_path)
+                table.expires = datetime.now() + timedelta(
+                                      days=self.expiration)
+                self.bqClient.update_table(table, ['expires'])
 
             self.queryJob.add_done_callback(done_callback)
 
