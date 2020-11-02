@@ -855,15 +855,11 @@ class BqQueryBackedTableResource(BqQueryBasedResource):
         )
 
         if self.expiration > 0:
-            print("adding expiration param")
-            print(self.expiration)
-            print(".".join([self.table.project, self.table.dataset_id, self.table.table_id]))
             def done_callback(future):
               table_path = ".".join([self.table.project, self.table.dataset_id, self.table.table_id])
               table = self.bqClient.get_table(table_path)
               table.expires = datetime.now() + timedelta(days=self.expiration)
               self.bqClient.update_table(table, ['expires'])
-              print("added expiration param")
 
             self.queryJob.add_done_callback(done_callback)
 
