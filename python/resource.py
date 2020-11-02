@@ -16,6 +16,7 @@ from google.cloud.bigquery.job import WriteDisposition, \
 from google.cloud.bigquery.table import Table, TableReference
 from google.cloud.exceptions import NotFound
 
+from datetime import datetime, timedelta
 
 class Resource:
     def exists(self):
@@ -818,10 +819,11 @@ def strictSubstring(contained, container):
 
 class BqQueryBackedTableResource(BqQueryBasedResource):
     def __init__(self, query: str, table: Table,
-                 bqClient: Client, queryJob: QueryJob):
+                 bqClient: Client, queryJob: QueryJob, expiration: 0):
         super(BqQueryBackedTableResource, self)\
             .__init__(query, table, bqClient)
         self.queryJob = queryJob
+        self.expiration = expiration
 
     def tableExists(self):
         try:
@@ -851,6 +853,19 @@ class BqQueryBackedTableResource(BqQueryBasedResource):
             job_config=job_config,
             job_id=jobid
         )
+
+        if self.expiration > 0:
+            print("adding expiration param")
+            print(self.expiration)
+            print(".".join([self.table.project, self.table.dataset_id, self.table.table_id]))
+            def done_callback(future):
+              table_path = ".".join([self.table.project, self.table.dataset_id, self.table.table_id])
+              table = self.bqClient.get_table(table_path)
+              table.expires = datetime.now() + timedelta(days=self.expiration)
+              self.bqClient.update_table(table, ['expires'])
+              print("added expiration param")
+
+            self.queryJob.add_done_callback(done_callback)
 
     def key(self):
         return ".".join([self.table.dataset_id, self.table.table_id])
