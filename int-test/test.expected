@@ -3,6 +3,7 @@ atest2.bashtemplate depends on atest2 atest2.one
 atest2.before depends on atest2 atest2.one
 atest2.complex_json_data depends on atest2
 atest2.dash_named_table_dash_dash depends on atest2
+atest2.expiration_test depends on atest2
 atest2.extract_test_localdata_comma depends on atest2 atest2.test_local_tabbed_data
 atest2.extract_test_localdata_comma_no_header depends on atest2 atest2.test_local_tabbed_data
 atest2.extract_test_localdata_default depends on atest2 atest2.test_local_tabbed_data

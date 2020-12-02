@@ -234,9 +234,13 @@ class BqQueryTemplatingFileLoader(FileLoader):
 
         prev = key in out and out[key] or None
 
-        expiration = 0
+        # ensure if we have a value for expiration it is an int
+        expiration = None
         if 'expiration' in templateVars:
-            expiration = templateVars['expiration']
+            try:
+                expiration = int(templateVars['expiration'])
+            except:
+                expiration = None
 
         if self.tableType == TableType.TABLE:
             jT = self.bqJobs.getJobForTable(bqTable)

@@ -854,7 +854,7 @@ class BqQueryBackedTableResource(BqQueryBasedResource):
             job_id=jobid
         )
 
-        if self.expiration > 0:
+        if self.expiration is not None:
             def done_callback(future):
                 table_path = ".".join([self.table.project,
                                       self.table.dataset_id,
