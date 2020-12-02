@@ -239,7 +239,7 @@ class BqQueryTemplatingFileLoader(FileLoader):
         if 'expiration' in templateVars:
             try:
                 expiration = int(templateVars['expiration'])
-            except:
+            except Exception:
                 expiration = None
 
         if self.tableType == TableType.TABLE:
