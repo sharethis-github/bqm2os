@@ -819,7 +819,7 @@ def strictSubstring(contained, container):
 
 class BqQueryBackedTableResource(BqQueryBasedResource):
     def __init__(self, query: str, table: Table,
-                 bqClient: Client, queryJob: QueryJob, expiration: 0):
+                 bqClient: Client, queryJob: QueryJob, expiration: None):
         super(BqQueryBackedTableResource, self)\
             .__init__(query, table, bqClient)
         self.queryJob = queryJob
