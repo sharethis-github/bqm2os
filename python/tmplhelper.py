@@ -64,6 +64,9 @@ def handleDateField(dt: datetime, val, key) -> str:
     :return:
     """
 
+    if not isinstance(dt, datetime):
+        raise Exception("dt must be an intance of datetime")
+
     if key.endswith("yyyy"):
         func = relativedelta
         param = "years"
@@ -72,16 +75,17 @@ def handleDateField(dt: datetime, val, key) -> str:
         func = relativedelta
         param = "months"
         format = "%Y%m"
+    elif key.endswith("yyyymmdd"):
+        func = timedelta
+        param = "days"
+        format = "%Y%m%d"
     elif key.endswith("yyyymmddhh"):
         func = timedelta
         param = "hours"
         format = "%Y%m%d%H"
     else:
-        func = timedelta
-        param = "days"
-        format = "%Y%m%d"
+        return None
 
-    assert isinstance(dt, datetime)
     toFormat = []
     if isinstance(val, int):
         params = {param: val}
@@ -97,7 +101,7 @@ def handleDateField(dt: datetime, val, key) -> str:
         return [val]
     else:
         raise Exception("Invalid datetime values to fill out.  Must "
-                        "be int or 2 element array of ints")
+                        "be int, 2 element array of ints, or string")
 
     return sorted([dt.strftime(format) for dt in toFormat])
 
@@ -113,8 +117,9 @@ def explodeTemplate(templateVars: dict):
     # check for key with yyyymm, yyyymmdd, or yyyymmddhh
     # and handle it specially
     for (k, v) in templateVars.items():
-        if 'yyyy' in k:
-            templateVars[k] = handleDateField(datetime.now(), v, k)
+        date_vals = handleDateField(datetime.now(), v, k)
+        if date_vals is not None:
+            templateVars[k] = date_vals
 
     topremute = []
     for (k, v) in templateVars.items():
