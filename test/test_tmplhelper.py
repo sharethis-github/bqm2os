@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 
 from frozendict import frozendict
 
-from tmplhelper import explodeTemplate, handleDayDateField, evalTmplRecurse
+from tmplhelper import explodeTemplate, handleDateField, evalTmplRecurse
 
 
 class Test(unittest.TestCase):
@@ -105,20 +105,37 @@ class Test(unittest.TestCase):
 
     def testHandleDayDateFieldIntFormat(self):
         d = datetime.strptime('20051231', '%Y%m%d')
-        result = handleDayDateField(d, -1)
+        result = handleDateField(d, -1, "yyyymmdd")
         expected = ['20051230']
         self.assertEqual(result, expected)
 
     def testHandleDayDateFieldIntArrayFormat(self):
         d = datetime.strptime('20051231', '%Y%m%d')
-        result = handleDayDateField(d, [-1, -3])
+        result = handleDateField(d, [-1, -3], "yyyymmdd")
         expected = sorted(['20051230', '20051229', '20051228'])
         self.assertEqual(result, expected)
 
+    def testHandleHourDateFieldIntArrayFormat(self):
+        d = datetime.strptime('20051231', '%Y%m%d')
+        result = handleDateField(d, [-1, -3], "yyyymmddhh")
+        expected = sorted(['2005123023', '2005123022', '2005123021'])
+        self.assertEqual(result, expected)    
+
+    def testHandleMonthDateFieldIntArrayFormat(self):
+        d = datetime.strptime('20051231', '%Y%m%d')
+        result = handleDateField(d, [-1, -3], "yyyymm")
+        expected = sorted(['200511', '200510', '200509'])
+        self.assertEqual(result, expected)   
+
+    def testHandleYearDateFieldIntArrayFormat(self):
+        d = datetime.strptime('20051231', '%Y%m%d')
+        result = handleDateField(d, [-1, -3], "yyyy")
+        expected = sorted(['2004', '2003', '2002'])
+        self.assertEqual(result, expected)   
+
     def testHandleDayDateFieldIntStringArrayFormat(self):
         d = datetime.strptime('20051231', '%Y%m%d')
-        result = handleDayDateField(d, ["-1",
-                                        -3])
+        result = handleDateField(d, ["-1", -3], "yyyymmdd")
         expected = sorted(['20051230', '20051229', '20051228'])
         self.assertEqual(result, expected)
 
