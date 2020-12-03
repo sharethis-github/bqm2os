@@ -234,11 +234,20 @@ class BqQueryTemplatingFileLoader(FileLoader):
 
         prev = key in out and out[key] or None
 
+        # ensure if we have a value for expiration it is an int
+        expiration = None
+        if 'expiration' in templateVars:
+            try:
+                expiration = int(templateVars['expiration'])
+            except Exception:
+                expiration = None
+
         if self.tableType == TableType.TABLE:
             jT = self.bqJobs.getJobForTable(bqTable)
             arsrc = BqQueryBackedTableResource([query], bqTable,
                                                self.bqClient,
-                                               queryJob=jT)
+                                               queryJob=jT,
+                                               expiration=expiration)
             out[key] = arsrc
             # check if there is extraction logic
             # todo: we need to populate the extraction job
@@ -284,7 +293,8 @@ class BqQueryTemplatingFileLoader(FileLoader):
                 jT = self.bqJobs.getJobForTable(bqTable)
                 arsrc = BqQueryBackedTableResource([query], bqTable,
                                                    self.bqClient,
-                                                   queryJob=jT)
+                                                   queryJob=jT,
+                                                   expiration=expiration)
                 out[key] = arsrc
 
         elif self.tableType == TableType.UNION_VIEW:

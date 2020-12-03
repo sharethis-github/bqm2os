@@ -4,6 +4,7 @@ import logging
 import re
 import subprocess
 import uuid
+from datetime import datetime, timedelta
 from json.decoder import JSONDecodeError
 
 from google.cloud import bigquery
@@ -818,10 +819,11 @@ def strictSubstring(contained, container):
 
 class BqQueryBackedTableResource(BqQueryBasedResource):
     def __init__(self, query: str, table: Table,
-                 bqClient: Client, queryJob: QueryJob):
+                 bqClient: Client, queryJob: QueryJob, expiration: None):
         super(BqQueryBackedTableResource, self)\
             .__init__(query, table, bqClient)
         self.queryJob = queryJob
+        self.expiration = expiration
 
     def tableExists(self):
         try:
@@ -851,6 +853,18 @@ class BqQueryBackedTableResource(BqQueryBasedResource):
             job_config=job_config,
             job_id=jobid
         )
+
+        if self.expiration is not None:
+            def done_callback(future):
+                table_path = ".".join([self.table.project,
+                                      self.table.dataset_id,
+                                      self.table.table_id])
+                table = self.bqClient.get_table(table_path)
+                table.expires = datetime.now() + timedelta(
+                                      days=self.expiration)
+                self.bqClient.update_table(table, ['expires'])
+
+            self.queryJob.add_done_callback(done_callback)
 
     def key(self):
         return ".".join([self.table.dataset_id, self.table.table_id])
