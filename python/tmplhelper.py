@@ -1,5 +1,6 @@
 import string
 from datetime import datetime, timedelta
+from dateutil.relativedelta import relativedelta
 
 
 def evalTmplRecurse(templateKeys: dict):
@@ -52,34 +53,57 @@ def keysOfTemplate(strr):
     return set([x[1] for x in string.Formatter().parse(strr) if x[1]])
 
 
-def handleDayDateField(dt: datetime, val) -> str:
+def handleDateField(dt: datetime, val, key) -> str:
     """
     val can be a string in which case we return it
     it can be an int in which case we evaluate it as a date that
-    many days in the future or ago
+    many years/months/days/hours in the future or ago
 
     We may get more complicated in the future to support ranges, etc
 
     :return:
     """
 
-    assert isinstance(dt, datetime)
+    if not isinstance(dt, datetime):
+        raise Exception("dt must be an intance of datetime")
+
+    if key.endswith("yyyy"):
+        func = relativedelta
+        param = "years"
+        format = "%Y"
+    elif key.endswith("yyyymm"):
+        func = relativedelta
+        param = "months"
+        format = "%Y%m"
+    elif key.endswith("yyyymmdd"):
+        func = timedelta
+        param = "days"
+        format = "%Y%m%d"
+    elif key.endswith("yyyymmddhh"):
+        func = timedelta
+        param = "hours"
+        format = "%Y%m%d%H"
+    else:
+        return None
+
     toFormat = []
     if isinstance(val, int):
-        newdate = dt + timedelta(days=val)
+        params = {param: val}
+        newdate = dt + func(**params)
         toFormat.append(newdate)
     elif isinstance(val, list) and len(val) == 2:
         val = sorted([int(x) for x in val])
         for v in range(int(val[0]), int(val[1]) + 1):
-            newdate = dt + timedelta(days=v)
+            params = {param: v}
+            newdate = dt + func(**params)
             toFormat.append(newdate)
     elif isinstance(val, str):
         return [val]
     else:
         raise Exception("Invalid datetime values to fill out.  Must "
-                        "be int or 2 element array of ints")
+                        "be int, 2 element array of ints, or string")
 
-    return sorted([dt.strftime("%Y%m%d") for dt in toFormat])
+    return sorted([dt.strftime(format) for dt in toFormat])
 
 
 def explodeTemplate(templateVars: dict):
@@ -89,10 +113,13 @@ def explodeTemplate(templateVars: dict):
 
     :return:
     """
-    # check for key with yyyymmdd and handle it specially
+
+    # check for key with yyyymm, yyyymmdd, or yyyymmddhh
+    # and handle it specially
     for (k, v) in templateVars.items():
-        if 'yyyymmdd' in k:
-            templateVars[k] = handleDayDateField(datetime.today(), v)
+        date_vals = handleDateField(datetime.now(), v, k)
+        if date_vals is not None:
+            templateVars[k] = date_vals
 
     topremute = []
     for (k, v) in templateVars.items():

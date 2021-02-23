@@ -819,7 +819,7 @@ def strictSubstring(contained, container):
 
 class BqQueryBackedTableResource(BqQueryBasedResource):
     def __init__(self, query: str, table: Table,
-                 bqClient: Client, queryJob: QueryJob, expiration: 0):
+                 bqClient: Client, queryJob: QueryJob, expiration: None):
         super(BqQueryBackedTableResource, self)\
             .__init__(query, table, bqClient)
         self.queryJob = queryJob
@@ -854,7 +854,7 @@ class BqQueryBackedTableResource(BqQueryBasedResource):
             job_id=jobid
         )
 
-        if self.expiration > 0:
+        if self.expiration is not None:
             def done_callback(future):
                 table_path = ".".join([self.table.project,
                                       self.table.dataset_id,
