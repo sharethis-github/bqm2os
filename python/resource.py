@@ -375,7 +375,7 @@ class BqProcessTableResource(BqTableBasedResource):
 
         job_config = bigquery.LoadJobConfig(
             source_format=srcFormat,
-            fieldDelimiter=fieldDelimiter, ignore_unknown_values=True,
+            field_delimiter=fieldDelimiter, ignore_unknown_values=True,
             write_disposition=WriteDisposition.WRITE_TRUNCATE,
             job_name=str(uuid.uuid4()),
             schema=self.schema)
@@ -385,16 +385,6 @@ class BqProcessTableResource(BqTableBasedResource):
                 = self.bqClient.load_table_from_file(source_file,
                                                      self.table,
                                                      job_config=job_config)
-
-        # with open(datascript, 'rb') as readable:
-        #     ret = self.table.upload_from_file(
-        #         readable, source_format=srcFormat,
-        #         field_delimiter=fieldDelimiter,
-        #         ignore_unknown_values=True,
-        #         write_disposition=WriteDisposition.WRITE_TRUNCATE,
-        #         job_name=str(uuid.uuid4()),
-        #         rewind=True
-        #     )
 
     def key(self):
         return ".".join([self.table.dataset_id, self.table.table_id])
@@ -492,6 +482,7 @@ class BqDataLoadTableResource(BqTableBasedResource):
         if srcFormat == SourceFormat.CSV:
             job_config.skip_leading_rows = 1
         job_config.autodetect = True
+        job_config.write_disposition = WriteDisposition.WRITE_TRUNCATE
 
         with open(self.file, 'rb') as readable:
             job = self.bqClient.load_table_from_file(
