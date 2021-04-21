@@ -66,6 +66,10 @@ class BqJobs:
                                        state_filter=state)
         while True:
             for t in iter:
+                # we have a gap here
+                # TODO: block for extract jobs which are already running
+                if type(t) == ExtractJob:
+                    continue
                 if t.destination:
                     tableKey = _buildDataSetTableKey_(t.destination)
                     if tableKey in self.tableToJobMap:
