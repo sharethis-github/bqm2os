@@ -532,7 +532,6 @@ def processLoadTableOptions(options: dict):
     :param job: An instance of LoadTableFromStorageJob
     :return: None - simply decorates the job
     """
-    print(options)
     job_config = bigquery.LoadJobConfig()
     job_config.source_format = DestinationFormat.NEWLINE_DELIMITED_JSON
     job_config.ignore_unknown_values = True
@@ -604,6 +603,13 @@ class BqGcsTableLoadResource(BqTableBasedResource):
         self.options = options
         self.uris = tuple([uri for uri in self.query.split("\n") if
                           uri.startswith("gs://")])
+        self.expiration = None
+        if "expiration" in self.options:
+            try:
+                self.expiration = int(self.options["expiration"])
+            except Exception:
+                raise Exception("expiration must be an integer: load: ",
+                                self.table.table_id)
 
     def isRunning(self):
         return isJobRunning(self.job)
@@ -620,6 +626,19 @@ class BqGcsTableLoadResource(BqTableBasedResource):
                 jobid,
                 job_config=processLoadTableOptions(self.options)
                 )
+
+    def exists(self):
+        try:
+            self.table = self.bqClient.get_table(self.table)
+            # update expiration if not set
+            if self.expiration is not None and self.table.expires is None:
+                self.table.expires = datetime.now() + timedelta(
+                    days=self.expiration)
+                self.bqClient.update_table(self.table, ['expires'])
+
+            return True
+        except NotFound:
+            return False
 
     def dependsOn(self, other: Resource):
         if self == other:
