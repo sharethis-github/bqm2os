@@ -608,8 +608,8 @@ class BqGcsTableLoadResource(BqTableBasedResource):
             try:
                 self.expiration = int(self.options["expiration"])
             except Exception:
-                raise Exception("expiration must be an integer: load: "
-                                , self.table.table_id)
+                raise Exception("expiration must be an integer: load: ",
+                                self.table.table_id)
 
     def isRunning(self):
         return isJobRunning(self.job)
