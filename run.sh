@@ -24,6 +24,12 @@ SECRET=${SECRET:-k8app__bq-third-party__staging__bqm2-json__gcloud-private-key}
 mkdir -p /tmp/creds
 docker run -ti -v ~/.aws:/root/.aws -v /tmp/creds:/tmp/creds -e AWS_SHARED_CREDENTIALS_FILE=/root/.aws/mfa -e AWS_DEFAULT_REGION=us-east-1 docker.io/stops/secrets-manager-v2:5b20bdefaa python /src/client.py ${SECRET} /tmp/creds/gcloud-private-key
 
+
+if [[ ! -f ~/.vimrc ]]
+then
+    touch ~/.vimrc
+fi
+
 docker run -e GOOGLE_APPLICATION_CREDENTIALS=/gcloud-private-key \
 -e AWS_SHARED_CREDENTIALS_FILE=/root/.aws/mfa \
 -v $SRC_DIR/config/templates/secrets/taxonomy-run:/mnt/run \
