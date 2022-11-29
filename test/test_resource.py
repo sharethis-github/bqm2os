@@ -51,32 +51,32 @@ class Test(unittest.TestCase):
     Client,
                                         mock_Table: Table,
                                         mock_Table2: Table):
-        mock_Table.project = "sharethis.com:quixotic-spot-526"
+        mock_Table.project = "yourproject:qualifier"
         mock_Table.name = "url_taxonomy_assignment_ranked_url_title_tokens_kw_20170601"
         mock_Table.dataset_name = "test"
         query = """#standardSQL
 
 SELECT *
 FROM (
-(select * from `sharethis.com:quixotic-spot-526.test.url_taxonomy_assignment_0_url_title_tokens_kw_20170601`)
+(select * from `yourproject:qualifier.test.url_taxonomy_assignment_0_url_title_tokens_kw_20170601`)
 union all
-(select * from `sharethis.com:quixotic-spot-526.test.url_taxonomy_assignment_1_url_title_tokens_kw_20170601`)
+(select * from `yourproject:qualifier.test.url_taxonomy_assignment_1_url_title_tokens_kw_20170601`)
 union all
-(select * from `sharethis.com:quixotic-spot-526.test.url_taxonomy_assignment_2_url_title_tokens_kw_20170601`)
+(select * from `yourproject:qualifier.test.url_taxonomy_assignment_2_url_title_tokens_kw_20170601`)
 union all
-(select * from `sharethis.com:quixotic-spot-526.test.url_taxonomy_assignment_3_url_title_tokens_kw_20170601`)
+(select * from `yourproject:qualifier.test.url_taxonomy_assignment_3_url_title_tokens_kw_20170601`)
 union all
-(select * from `sharethis.com:quixotic-spot-526.test.url_taxonomy_assignment_4_url_title_tokens_kw_20170601`)
+(select * from `yourproject:qualifier.test.url_taxonomy_assignment_4_url_title_tokens_kw_20170601`)
 union all
-(select * from `sharethis.com:quixotic-spot-526.test.url_taxonomy_assignment_5_url_title_tokens_kw_20170601`)
+(select * from `yourproject:qualifier.test.url_taxonomy_assignment_5_url_title_tokens_kw_20170601`)
 union all
-(select * from `sharethis.com:quixotic-spot-526.test.url_taxonomy_assignment_6_url_title_tokens_kw_20170601`)
+(select * from `yourproject:qualifier.test.url_taxonomy_assignment_6_url_title_tokens_kw_20170601`)
 union all
-(select * from `sharethis.com:quixotic-spot-526.test.url_taxonomy_assignment_7_url_title_tokens_kw_20170601`)
+(select * from `yourproject:qualifier.test.url_taxonomy_assignment_7_url_title_tokens_kw_20170601`)
 union all
-(select * from `sharethis.com:quixotic-spot-526.test.url_taxonomy_assignment_8_url_title_tokens_kw_20170601`)
+(select * from `yourproject:qualifier.test.url_taxonomy_assignment_8_url_title_tokens_kw_20170601`)
 union all
-(select * from `sharethis.com:quixotic-spot-526.test.url_taxonomy_assignment_9_url_title_tokens_kw_20170601`)
+(select * from `yourproject:qualifier.test.url_taxonomy_assignment_9_url_title_tokens_kw_20170601`)
 )
 """
 
@@ -95,10 +95,10 @@ select
   url,
   sum(float(tscore) * float(fscore)) overlap
 from (
-select id, description, url, kw, fscore, score tscore from [sharethis.com:quixotic-spot-526:test.url_title_tokens_kw_20170601]
+select id, description, url, kw, fscore, score tscore from [yourproject:qualifier:test.url_title_tokens_kw_20170601]
 join each
 (select id, description, feature, score fscore from
-[sharethis.com:quixotic-spot-526:test.kw_features_ranked]
+[yourproject:qualifier:test.kw_features_ranked]
 where abs(hash(id)) % 10 == 8 ) fkw
 on kw = fkw.feature
 group each by id, description, url, kw, tscore, fscore
@@ -119,7 +119,7 @@ group each by id, description, url
                                         mock_Table2: Table):
         mock_Table.name = "v1_"
         mock_Table.dataset_name = "dset"
-        query = "... sharethis.com:quixotic-spot-526:mergelog.v1_], " \
+        query = "... yourproject:qualifier:mergelog.v1_], " \
                 "DATE_ADD(CURRENT_TIMESTAMP(), -2, 'DAY'), ... "
 
         left = BqQueryBasedResource(query, mock_Table, 0, mock_Client)

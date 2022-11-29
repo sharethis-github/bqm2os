@@ -9,6 +9,7 @@ from json.decoder import JSONDecodeError
 
 from google.cloud import bigquery
 from google.cloud import storage
+from google.cloud.bigquery import ExternalConfig
 from google.cloud.bigquery.client import Client
 from google.cloud.bigquery.dataset import Dataset
 from google.cloud.bigquery.job import WriteDisposition, \
@@ -16,6 +17,12 @@ from google.cloud.bigquery.job import WriteDisposition, \
     Compression, DestinationFormat, _AsyncJob, LoadJob, ExtractJob
 from google.cloud.bigquery.table import Table, TableReference
 from google.cloud.exceptions import NotFound
+
+# max length of description allowed by biquery
+# https://cloud.google.com/bigquery/quotas - found this by updating
+# a single table description.
+# We take 150 off the max
+MAX_DESCRIPTION_LEN = 16384
 
 
 class Resource:
@@ -173,7 +180,11 @@ class BqDatasetBackedResource(Resource):
         """ time in milliseconds.  None if not created """
         createdTime = self.dataset.modified
         if createdTime:
+            # replaced %s with %S to avoid "invalid format"
+            # calling createdTime.strftime on windows
+            # return int(createdTime.strftime("%S")) * 1000
             return int(createdTime.strftime("%s")) * 1000
+
         return None
 
     def create(self):
@@ -377,7 +388,6 @@ class BqProcessTableResource(BqTableBasedResource):
             source_format=srcFormat,
             field_delimiter=fieldDelimiter, ignore_unknown_values=True,
             write_disposition=WriteDisposition.WRITE_TRUNCATE,
-            job_name=str(uuid.uuid4()),
             schema=self.schema)
 
         with open(datascript, "rb") as source_file:
@@ -420,9 +430,8 @@ class BqProcessTableResource(BqTableBasedResource):
 
 
 class BqDataLoadTableResource(BqTableBasedResource):
-    """ todo: currently we block during the creation of this
-    table but we should probably treat this just like any table
-    create and put it in the background
+    """
+        script for loading local data
     """
     def __init__(self, file: str, table: Table,
                  schema: tuple, bqClient: Client,
@@ -545,7 +554,8 @@ def processLoadTableOptions(options: dict):
         "NEWLINE_DELIMITED_JSON": SourceFormat.NEWLINE_DELIMITED_JSON,
         "CSV": SourceFormat.CSV,
         "DATASTORE_BACKUP": SourceFormat.DATASTORE_BACKUP,
-        "PARQUET": bigquery.SourceFormat.PARQUET
+        "PARQUET": bigquery.SourceFormat.PARQUET,
+        "ORC": bigquery.SourceFormat.ORC
     }
 
     if "source_format" in options:
@@ -582,6 +592,23 @@ def processLoadTableOptions(options: dict):
 
     if 'skip_leading_rows' in options:
         job_config.skip_leading_rows = int(options["skip_leading_rows"])
+
+    if 'allow_quoted_newlines' in options:
+        job_config.allow_quoted_newlines = options["allow_quoted_newlines"]
+
+    if 'encoding' in options:
+        job_config.encoding = options["encoding"]
+
+    if 'quote_character' in options:
+        job_config.quote_character = options["quote_character"]
+
+    if 'null_marker' in options:
+        job_config.null_marker = options["null_marker"]
+
+    if 'destination_table_description' in options:
+        job_config.destination_table_description = \
+            options["destination_table_description"]
+
     return job_config
 
 
@@ -594,16 +621,20 @@ class BqGcsTableLoadResource(BqTableBasedResource):
                  query: str,
                  schema: tuple,
                  options: dict):
-        super(BqGcsTableLoadResource, self)\
-            .__init__(table, bqClient)
+        super(BqGcsTableLoadResource, self).__init__(table, bqClient)
         self.job = job
-        self.gcsClient = gcsClient,
+        self.gcsClient = gcsClient
         self.query = query
         self.schema = schema
         self.options = options
         self.uris = tuple([uri for uri in self.query.split("\n") if
                           uri.startswith("gs://")])
         self.expiration = None
+        self.require_exists = None
+
+        if "require_exists" in self.options:
+            self.require_exists = self.options['require_exists']
+
         if "expiration" in self.options:
             try:
                 self.expiration = int(self.options["expiration"])
@@ -618,14 +649,29 @@ class BqGcsTableLoadResource(BqTableBasedResource):
         return str(self.uris)
 
     def create(self):
-        jobid = "-".join(["create", self.table.dataset_id,
-                          self.table.table_id, str(uuid.uuid4())])
+        if self.require_exists is not None and \
+                not gcsBlobExists(self.gcsClient, self.require_exists):
+            print(
+                self.require_exists +
+                " required file does not exist. Unable to load: ",
+                self.key()
+            )
+            return
+
+        jobid = "-".join(
+            [
+                "create",
+                self.table.dataset_id,
+                self.table.table_id,
+                str(uuid.uuid4())
+            ]
+        )
         self.job = self.bqClient.load_table_from_uri(
-                self.uris,
-                self.table,
-                jobid,
-                job_config=processLoadTableOptions(self.options)
-                )
+            self.uris,
+            self.table,
+            jobid,
+            job_config=processLoadTableOptions(self.options)
+            )
 
     def exists(self):
         try:
@@ -719,15 +765,25 @@ class BqQueryBasedResource(BqTableBasedResource):
 
         if createdTime:
             # getting even more debt ridden
-            finalQuery = self.makeFinalQuery()
-            # hijack this step to update description - ugh - debt supreme
+            final_query = self.makeFinalQuery()
+            # hijack this step to update description
             if not self.table.description:
+                # we use a create time + a missing description
+                # as a queue to update description with the state
+                # necessary to know if we should update / re-run next
+                # time.
+                padding = 300
+                truncated = len(final_query) > MAX_DESCRIPTION_LEN - padding \
+                    and "(truncated due to size)" or ""
 
-                msg = ["This table/view was created with the " +
-                       "following query", "", "/**", finalQuery, "*/",
+                msg = [f"This table/view was created with "
+                       f"the following {truncated} query", "/**",
+                       f"{final_query[:MAX_DESCRIPTION_LEN-padding]}",
+                       "*/",
                        "Edits to this description will not be saved",
                        "Do not edit", "",
                        self.makeQueryHashTag()]
+
                 self.table.description = "\n".join(msg)
                 self.table = self.bqClient.update_table(
                         self.table,
@@ -890,6 +946,8 @@ def processExtractTableOptions(options: dict):
     compressions = {
         "GZIP": Compression.GZIP,
         "NONE": Compression.NONE,
+        "SNAPPY": Compression.SNAPPY,
+        "DEFLATE": Compression.DEFLATE
     }
 
     job_config = bigquery.job.ExtractJobConfig()
@@ -904,7 +962,8 @@ def processExtractTableOptions(options: dict):
     formats = {
         "NEWLINE_DELIMITED_JSON": DestinationFormat.NEWLINE_DELIMITED_JSON,
         "CSV": DestinationFormat.CSV,
-        "AVRO": DestinationFormat.AVRO
+        "AVRO": DestinationFormat.AVRO,
+        "PARQUET": "PARQUET"
     }
 
     if "destination_format" in options:
@@ -917,6 +976,8 @@ def processExtractTableOptions(options: dict):
         job_config.field_delimiter = options['field_delimiter']
 
     if "print_header" in options:
+        if type(options['print_header']) == 'str':
+            raise Exception("print_header value must be a json boolean")
         job_config.print_header = bool(options['print_header'])
 
     return job_config
@@ -980,8 +1041,7 @@ class BqExtractTableResource(Resource):
                 gcsUris(self.gcsClient, self.uris)]
 
         if len(objs) == 0:
-            # basically i've never be extracted
-            print("returning 0")
+            # basically i've never been extracted
             return 0
 
         return max(objs)
@@ -993,17 +1053,6 @@ class BqExtractTableResource(Resource):
             return False
 
         return self.updateTime() < int(createdTime.strftime("%s")) * 1000
-
-
-# def wait_for_job(job: QueryJob):
-#     while True:
-#         job.reload()  # Refreshes the state via a GET request.
-#         print("waiting for job", job.name)
-#         if job.state == 'DONE':
-#             if job.error_result:
-#                 raise RuntimeError(job.errors)
-#             return
-#         time.sleep(1)
 
 
 def export_data_to_gcs(dataset_name, table_name, destination):
@@ -1036,15 +1085,134 @@ def parseBucketAndPrefix(uris):
     return (bucket, prefix)
 
 
+def gcsBlobExists(gcsclient, gcsUri):
+    bucket_name, blob_path = parseBucketAndBlobPath(gcsUri)
+    bucket = gcsclient.bucket(bucket_name)
+    blob = bucket.blob(blob_path)
+    return blob.exists()
+
+
+def parseBucketAndBlobPath(uri):
+    bucket_name = uri.split("/")[2]
+    blob_path = "/".join(uri.split("/")[3:])
+    return (bucket_name, blob_path)
+
+
 def gcsExists(gcsClient, uris):
     return len(gcsUris(gcsClient, uris)) > 0
 
 
 def gcsUris(gcsClient, uris):
     (bucket, prefix) = parseBucketAndPrefix(uris)
-    prefix = prefix.replace("*.gz", "")
+    parts = prefix.split('*')
+    if len(parts) > 2:
+        raise Exception(f"The extract url must only contain " +
+                        "a single * char and provide file " +
+                        "suffix info: {str(uris)}")
+
+    args = {'prefix': parts[0], 'delimiter': '/'}
+
     bucket = gcsClient.get_bucket(bucket)
-    objs = [x for x in bucket.list_blobs(prefix=prefix,
-                                         delimiter="/")]
+    objs = [x for x in bucket.list_blobs(**args)
+            if len(parts) == 1 or x.name.endswith(parts[1])]
 
     return objs
+
+
+# deliberately class level
+def legacyBqQueryDependsOn(self, other: Resource):
+    if self == other:
+        return False
+
+    if 'query' in dir(self):
+        filtered = getFiltered(self.query)
+        if strictSubstring("".join(["", other.key(), " "]), filtered):
+            return True
+
+        # we need a better way!
+        # other may be simply a dataset in which case it will have not
+        # .query field
+    if isinstance(other, BqDatasetBackedResource) \
+            and strictSubstring(other.key(), self.key()):
+        return True
+    return False
+
+
+# base resource class for all table back resources
+class BqExternalTableBasedResource(BqTableBasedResource):
+    """ Base class of query based big query actions """
+    def __init__(self, bqclient: Client, table: Table,
+                 external_config: ExternalConfig):
+        self.table = table
+        self.bqClient = bqclient
+        self.external_config = external_config
+        self.table.external_data_configuration = external_config
+
+        # assert if autodetect that there's no schema
+        obj = external_config.to_api_repr()
+        autodetect = obj.get("autodetect", None)
+        if autodetect and table.schema:
+            raise Exception("if autodetect is true, then you " +
+                            "must not specify a schema")
+        if not autodetect and not table.schema:
+            raise Exception("you must not specify a schema in a .schema file")
+
+    def exists(self):
+        try:
+            self.bqClient.get_table(self.table)
+            return True
+        except NotFound:
+            return False
+
+    def create(self):
+        self.bqClient.delete_table(self.table, not_found_ok=True)
+        self.table = self.bqClient.create_table(self.table)
+        self.table.description = self.make_description()
+        # update description - for some reason this can't be done
+        # on create???
+        self.bqClient.update_table(self.table, ["description"])
+
+    def key(self):
+        return ".".join([self.table.dataset_id,
+                         self.table.table_id])
+
+    def dependsOn(self, resource: Resource):
+        if self.table.dataset_id == resource.key():
+            return True
+        return legacyBqQueryDependsOn(self, resource)
+
+    def isRunning(self):
+        # this is not an async operation
+        return False
+
+    def shouldUpdate(self):
+        current_description = self.bqClient.get_table(self.table).description
+        if not current_description:
+            return True
+        if not self.makeHashTag() in current_description:
+            return True
+        return False
+
+    def makeHashTag(self):
+        m = hashlib.md5()
+        s = json.dumps(self.external_config.to_api_repr(),
+                       sort_keys=True).encode()
+        m.update(s)
+        return m.hexdigest()
+
+    def __eq__(self, other):
+        return self.key() == other.key()
+
+    def make_description(self):
+        ret = f"""
+The following config was used to create this external table.
+
+{json.dumps(self.external_config.to_api_repr(), sort_keys=True, indent=2)}
+
+Do not edit this confighash: {self.makeHashTag()}
+        """
+        return ret
+
+    def __str__(self):
+        return ".".join([self.table.dataset_id,
+                         self.table.table_id]) + "-external-table"

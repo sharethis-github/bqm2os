@@ -10,11 +10,13 @@ from google.cloud import storage
 from google.cloud.exceptions import NotFound
 
 import tmplhelper
+from resource import BqExternalTableBasedResource
 from resource import Resource, _buildDataSetKey_, BqDatasetBackedResource, \
     BqJobs, BqQueryBackedTableResource, _buildDataSetTableKey_, \
     BqViewBackedTableResource, BqDataLoadTableResource, \
     BqExtractTableResource, BqGcsTableLoadResource, BqProcessTableResource
 from tmplhelper import evalTmplRecurse, explodeTemplate
+from date_formatter_helper import helpers
 
 
 class FileLoader:
@@ -125,6 +127,7 @@ class TableType(Enum):
     UNION_TABLE = 5
     UNION_VIEW = 6
     BASH_TABLE = 7
+    EXTERNAL_TABLE = 8
 
 
 class BqQueryTemplatingFileLoader(FileLoader):
@@ -167,6 +170,7 @@ class BqQueryTemplatingFileLoader(FileLoader):
         self.bqJobs = bqJobs
         self.datasets = {}
         self.tableType = tableType
+        self.cachedFileLoads = {}
         if not self.tableType or self.tableType not in TableType:
             raise Exception("TableType must be set")
 
@@ -194,6 +198,15 @@ class BqQueryTemplatingFileLoader(FileLoader):
 
         return ret
 
+    def cached_file_read(self, file):
+        if file in self.cachedFileLoads:
+            return self.cachedFileLoads[file]
+        else:
+            with open(file) as filestr:
+                filestr = filestr.read()
+            self.cachedFileLoads[file] = filestr
+            return filestr
+
     def processTemplateVar(self, templateVars: dict, template: str,
                            filePath: str, mtime: int, out: dict):
         """
@@ -210,6 +223,9 @@ class BqQueryTemplatingFileLoader(FileLoader):
         Datasets are ok.
         :return: void
         """
+        templateVarsCopy = templateVars.copy()
+        helpers.format_all_date_keys(templateVarsCopy)
+
         if 'dataset' not in templateVars:
             raise Exception("Missing dataset in template vars for " +
                             filePath + ".vars")
@@ -274,10 +290,10 @@ class BqQueryTemplatingFileLoader(FileLoader):
             if "source_format" not in templateVars:
                 raise Exception("source_format not found in template vars")
 
-            if templateVars["source_format"] != "PARQUET":
-                with open(filePath + ".schema") as schemaFile:
-                    schema = loadSchemaFromString(schemaFile.read().strip())
-                    templateVars["schema"] = schema
+            if templateVars["source_format"] not in set(["PARQUET", "ORC"]):
+                schemaFileStr = self.cached_file_read(filePath + ".schema")
+                schema = loadSchemaFromString(schemaFileStr.strip())
+                templateVars["schema"] = schema
 
             rsrc = BqGcsTableLoadResource(bqTable,
                                           self.bqClient,
@@ -308,11 +324,35 @@ class BqQueryTemplatingFileLoader(FileLoader):
 
         elif self.tableType == TableType.BASH_TABLE:
             jT = self.bqJobs.getJobForTable(bqTable)
-            with open(filePath + ".schema") as schemaFile:
-                schema = loadSchemaFromString(schemaFile.read().strip())
+            stripped = self.cached_file_read(filePath + ".schema").strip()
+            schema = loadSchemaFromString(stripped)
+            # with open(filePath + ".schema") as schemaFile:
+            #     schema = loadSchemaFromString(schemaFile.read().strip())
             arsrc = BqProcessTableResource(query, bqTable, schema,
                                            self.bqClient,
                                            job=jT)
+            out[key] = arsrc
+        elif self.tableType == TableType.EXTERNAL_TABLE:
+            from google.cloud.bigquery import ExternalConfig
+            # query here is actually json
+            ext_config_obj = json.loads(query)
+            ext_config = ExternalConfig.from_api_repr(ext_config_obj)
+            autodetect = "autodetect" in ext_config_obj \
+                         and ext_config_obj["autodetect"]
+            schema = None
+            if not autodetect:
+                try:
+                    stripped = \
+                        self.cached_file_read(filePath + ".schema").strip()
+                    schema = loadSchemaFromString(stripped)
+                except Exception:
+                    raise Exception("Please provide a .schema "
+                                    "file for your external table. " +
+                                    filePath + ".schema")
+
+            bqTable = Table(".".join([project, dataset, table]), schema)
+            arsrc = BqExternalTableBasedResource(self.bqClient, bqTable,
+                                                 ext_config)
             out[key] = arsrc
 
         dsetKey = _buildDataSetKey_(bqTable)

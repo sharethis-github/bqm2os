@@ -1,48 +1,33 @@
 #!/bin/bash
 
 set -e
+set -o nounset
 
 cd $(dirname $0)
 
 . env.sh
 
-docker build -t $imagename:$current_commit .
-
-if [ -z $SRC_DIR ]; then
-  echo "Must specify SRC_DIR. Path where a user's git repos are present."
-  exit 1;
-fi
-echo "SRC: $SRC_DIR"
-
-if [[ ! -f ~/.aws/mfa ]]
-then
-    echo Please make you have a valid mfa credentials file
-    exit 1
-fi
-SECRET=${SECRET:-k8app__bq-third-party__staging__bqm2-json__gcloud-private-key}
-# get creds
-mkdir -p /tmp/creds
-docker run -ti -v ~/.aws:/root/.aws -v /tmp/creds:/tmp/creds -e AWS_SHARED_CREDENTIALS_FILE=/root/.aws/mfa -e AWS_DEFAULT_REGION=us-east-1 docker.io/stops/secrets-manager-v2:5b20bdefaa python /src/client.py ${SECRET} /tmp/creds/gcloud-private-key
-
+docker build --platform linux/amd64 -t $imagename:$current_commit .
 
 if [[ ! -f ~/.vimrc ]]
 then
     touch ~/.vimrc
 fi
 
-docker run -e GOOGLE_APPLICATION_CREDENTIALS=/gcloud-private-key \
+# create an empty .vimrc to prevent this getting mounted as a folder. Do us all a favor and set expandtab so we get no tabs.
+touch ~/.vimrc
+
+QUERIES=${QUERIES:-$(pwd)/queries}
+MOUNT=${MOUNT:-/queries}
+echo mounting ${QUERIES} to ${MOUNT}.  Set these yourself to override where your queries live and where they are mounted to in the countainer
+docker run --platform linux/amd64 -e GOOGLE_APPLICATION_CREDENTIALS=/gcloud-private-key \
 -e AWS_SHARED_CREDENTIALS_FILE=/root/.aws/mfa \
--v $SRC_DIR/config/templates/secrets/taxonomy-run:/mnt/run \
--v $SRC_DIR/dynamic-data-config/endpoints:/endpoints \
--v $SRC_DIR/dynamic-data-config/bigquery:/bigquery \
--v /tmp/creds/gcloud-private-key:/gcloud-private-key \
--v $SRC_DIR/taxonomy-mapping/:/mnt/templates \
+-v ${GOOGLE_APPLICATION_SERVICE_ACCOUNT}:/gcloud-private-key \
 -v ~/.vimrc:/root/.vimrc \
---name bqm2 -v ~/.config:/root/.config \
+-v ${QUERIES}:${MOUNT} \
+--name bqm2 \
 -v $(pwd)/python:/python \
 -v $(pwd)/test:/test \
 -v $(pwd)/int-test:/int-test \
 -v ~/.aws:/root/.aws \
 -ti --rm $imagename:$current_commit $@
-
-rm -rf /tmp/creds/gcloud-private-key

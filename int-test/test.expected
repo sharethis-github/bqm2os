@@ -19,8 +19,11 @@ atest2.parquet_upload depends on atest2
 atest2.read_load_thread depends on atest2 atest2.load_three
 atest2.test_ab depends on atest2
 atest2.test_cd depends on atest2
+atest2.test_csv depends on atest2
+atest2.test_csv_read depends on atest2 atest2.test_csv
 atest2.test_local_json_data depends on atest2
 atest2.test_local_tabbed_data depends on atest2
+atest2.test_parquet depends on atest2
 atest2.test_unionview depends on atest2 atest2.test_ab atest2.test_cd
 atest2.three depends on atest2
 atest2.two depends on atest2

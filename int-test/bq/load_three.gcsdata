@@ -1,1 +1,1 @@
-gs://sharethis-int-tmp/{dataset}.three/*.gz
+gs://{project}-bqm2-int-test/{dataset}.three/*.gz

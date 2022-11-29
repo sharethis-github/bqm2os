@@ -2,6 +2,8 @@ import string
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 
+from date_formatter_helper import helpers
+
 
 def evalTmplRecurse(templateKeys: dict):
     """
@@ -16,6 +18,8 @@ def evalTmplRecurse(templateKeys: dict):
     templateKeysCopy = templateKeys.copy()
     keysNeeded = {}
     usableKeys = {}
+
+    helpers.format_all_date_keys(templateKeysCopy)
 
     for (k, v) in templateKeysCopy.items():
         keys = keysOfTemplate(v)
@@ -65,7 +69,7 @@ def handleDateField(dt: datetime, val, key) -> str:
     """
 
     if not isinstance(dt, datetime):
-        raise Exception("dt must be an intance of datetime")
+        raise Exception("dt must be an instance of datetime")
 
     if key.endswith("yyyy"):
         func = relativedelta
