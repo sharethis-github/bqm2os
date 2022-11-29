@@ -1,0 +1,9 @@
+{{
+    "autodetect": false,
+    "sourceUris": ["gs://{project}-bqm2-int-test/testds.extract_test_localdata_tab/000000000000.gz"],
+    "sourceFormat": "CSV",
+    "maxBadRecords": 0,
+    "csvOptions": {{
+        "fieldDelimiter": "\t"
+    }}
+}}
