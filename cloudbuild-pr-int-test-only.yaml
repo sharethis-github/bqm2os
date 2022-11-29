@@ -1,0 +1,20 @@
+steps:
+
+  # build the container image
+#- name: "gcr.io/cloud-builders/docker"
+#  args: ["build", "-t", "gcr.io/$PROJECT_ID/bqm2:latest", "."]
+
+#- name: "gcr.io/cloud-builders/docker"
+#  args: ["push", "gcr.io/$PROJECT_ID/bqm2:latest"]
+
+- name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+  entrypoint: gcloud
+  args: ['secrets', 'versions', 'access', 'latest', '--secret=bqm2-int-test', '--out-file=/workspace/secret']
+
+- name: gcr.io/cloud-builders/docker
+  args: ["run",
+        "-i", "-v", "/workspace/secret:/gcloud-private-key",
+        "-e", "GOOGLE_APPLICATION_CREDENTIALS=/gcloud-private-key",
+        "gcr.io/$PROJECT_ID/bqm2:latest",
+        "bash",
+        "/int-test/test-basic.sh"]

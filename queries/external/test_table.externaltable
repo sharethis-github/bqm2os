@@ -1,0 +1,29 @@
+{{
+    "sourceUris": ["gs://profile_uploader_s3_eyeota_net_us/*.gz"],
+    "sourceFormat": "CSV",
+    "maxBadRecords": 10000,
+    "csvOptions": {{
+        "fieldDelimiter": "@",
+        "skipLeadingRows": "0",
+        "quote": "",
+        "allowQuotedNewlines": false,
+        "allowJaggedRows": true,
+        "encoding": "UTF-8",
+        "preserveAsciiControlCharacters": false
+    }},
+    "tableReference": {{
+        "projectId": "eyeota-test",
+        "datasetId": "idgraphs_202209",
+        "tableId": "ext_table_test"
+    }},
+    "labels": {{}},
+    "schema": {{
+        "fields": [
+            {{
+                "name": "row",
+                "type": "STRING",
+                "mode": "NULLABLE"
+            }}
+        ]
+    }}
+}}

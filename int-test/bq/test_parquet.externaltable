@@ -1,0 +1,6 @@
+{{
+    "autodetect": true,
+    "sourceUris": ["gs://{project}-bqm2-int-test/parquet_test.parquet"],
+    "sourceFormat": "PARQUET",
+    "maxBadRecords": 0
+}}

@@ -1,1 +1,4 @@
+# {three_yyyymmdd_dd} and {three_yyyymmdd_mm} and {three_yyyymmdd_yyyy}
+# {three_yyyymm_mm} and {three_yyyymm_yyyy} 
+# {three_yyyymmddhh_yyyy} and {three_yyyymmddhh_mm} and {three_yyyymmddhh_dd} and {three_yyyymmddhh_hh}
 select 1 as a

@@ -157,18 +157,30 @@ class DependencyExecutor:
                     print(self.resources[n], "already running")
                     running.add(n)
                     continue
+                else:
+                    running.discard(n)
                 if not self.resources[n].exists():
+                    if len(running) >= maxConcurrent:
+                        print("max concurrent running already")
+                        continue
                     self.handleRetries(retries, n)
                     print("executing: because it doesn't exist ", n)
                     self.resources[n].create()
-                    running.add(n)
+                    if (self.resources[n].isRunning()):
+                        running.add(n)
                 elif self.resources[n].shouldUpdate():
+                    if len(running) >= maxConcurrent:
+                        print("max concurrent running already")
+                        continue
                     self.handleRetries(retries, n)
                     print("executing: because our definition has changed",
                           n, self.resources[n])
                     self.resources[n].create()
                     running.add(n)
                 elif self.resources[n].updateTime() < depUpdateTimes[n]:
+                    if len(running) >= maxConcurrent:
+                        print("max concurrent running already")
+                        continue
                     self.handleRetries(retries, n)
                     print("executing: because our dependencies have "
                           "changed since we last ran",
@@ -200,15 +212,18 @@ class DependencyExecutor:
                 self.dependencies[n] = self.dependencies[n] - torm
 
             if len(self.dependencies):
-                if len(running):
-                    sleep(checkFrequency)
+                sleep(checkFrequency)
 
 
 if __name__ == "__main__":
     parser = optparse.OptionParser("[options] folder[ folder2[...]]")
     parser.add_option("--execute", dest="execute",
                       action="store_true", default=False,
-                      help="Execute the dependencies found in the resources")
+                      help="'execute' mode.  Accepts a list of folders "
+                           "- folder[ folder2[...]]."
+                      "Renders the templates found in those folders "
+                      "and executes them in proper order "
+                           "of their dependencies")
     parser.add_option("--dotml", dest="dotml",
                       action="store_true", default=False,
                       help="Generate dot ml graph of dag of execution")
@@ -217,17 +232,20 @@ if __name__ == "__main__":
                       help="Show the dependency tree")
     parser.add_option("--dumpToFolder", dest="dumpToFolder",
                       default=None,
-                      help="Dump expanded templates to disk to "
-                           "folder/file using the key of resource and "
-                           "content of template")
+                      help="Dump expanded templates to disk to the "
+                           "folder as files using the key of resource and "
+                           "content of template.  ")
     parser.add_option("--showJobs", dest="showJobs",
                       action="store_true", default=False,
                       help="Show the jobs")
     parser.add_option("--defaultDataset", dest="defaultDataset",
                       help="The default dataset which will be used if "
-                           "file definitions don't specify one")
+                           "file definitions don't specify one.  This "
+                           "will be automatically created during "
+                           "'execute' mode")
     parser.add_option("--maxConcurrent", dest="maxConcurrent", type=int,
-                      default=10)
+                      default=10, help="The maximum number of bq or "
+                                       "other jobs to run in parallel.")
     parser.add_option("--defaultProject", dest="defaultProject",
                       help="The default project which will be used if "
                            "file definitions don't specify one")
@@ -238,19 +256,28 @@ if __name__ == "__main__":
 
     parser.add_option("--maxRetry", dest="maxRetry", type=int,
                       default=2,
-                      help="The maximum retries for any single resource "
-                           "creation")
+                      help="Relevant to 'execute' mode. The maximum "
+                           "retries for any single resource "
+                           "creation. Once this number is hit, "
+                           "the program will exit non-zero")
 
     parser.add_option("--varsFile", dest="varsFile", type=str,
                       help="A json file whose data can be refered to in "
                            "view and query templates.  Must be a simple "
-                           "dictionary whose values are str")
+                           "dictionary whose values are string, integers, "
+                           "or arrays of strings and integers")
+
+    parser.add_option("--bqClientLocation", type=str,
+                      help="The location where datasets will be "
+                           "created. i.e. us-east1, us-central1, etc",
+                      default="US")
 
     (options, args) = parser.parse_args()
 
     FORMAT = '%(asctime)-15s %(clientip)s %(user)-8s %(message)s'
     logging.basicConfig(format=FORMAT)
 
+    additional_args = {'location': options.bqClientLocation}
     kwargs = {"dataset": options.defaultDataset}
     if options.varsFile:
         with open(options.varsFile) as f:
@@ -258,14 +285,14 @@ if __name__ == "__main__":
             for (k, v) in varJson.items():
                 kwargs[k] = v
 
-    client = Client()
+    client = Client(**additional_args)
     if options.defaultProject:
-        client = Client(options.defaultProject)
+        client = Client(options.defaultProject, **additional_args)
         kwargs["project"] = options.defaultProject
     else:
         kwargs["project"] = client.project
 
-    loadClient = Client(project=kwargs["project"])
+    loadClient = Client(project=kwargs["project"], **additional_args)
     gcsClient = storage.Client(project=kwargs["project"])
 
     bqJobs = BqJobs(client)
@@ -301,7 +328,12 @@ if __name__ == "__main__":
             bashtemplate=BqQueryTemplatingFileLoader(loadClient, gcsClient,
                                                      bqJobs,
                                                      TableType.BASH_TABLE,
-                                                     kwargs)))
+                                                     kwargs),
+            externaltable=BqQueryTemplatingFileLoader(loadClient, gcsClient,
+                                                      bqJobs,
+                                                      TableType.EXTERNAL_TABLE,
+                                                      kwargs))
+    )
 
     (resources, dependencies) = builder.buildDepend(args)
     executor = DependencyExecutor(resources, dependencies,
@@ -316,7 +348,7 @@ if __name__ == "__main__":
     elif options.dumpToFolder:
         executor.dump(options.dumpToFolder)
     elif options.showJobs:
-        for j in BqJobs(bigquery.Client()).jobs():
+        for j in BqJobs(bigquery.Client(**additional_args)).jobs():
             if j.state in set(['RUNNING', 'PENDING']):
                 print(j.name, j.state, j.errors)
     else:

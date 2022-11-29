@@ -193,10 +193,35 @@ class Test(unittest.TestCase):
 
         n = datetime.today()
         expectedDt = [dt.strftime("%Y%m%d") for dt in [n, n + timedelta(
-                days=-1)]]
+                      days=-1)]]
+        expectedY = [dt.strftime("%Y") for dt in [n, n + timedelta(
+            days=-1)]]
+        expectedM = [dt.strftime("%m") for dt in [n, n + timedelta(
+            days=-1)]]
+        expectedD = [dt.strftime("%d") for dt in [n, n + timedelta(
+            days=-1)]]
+        expectedYY = [dt.strftime("%y") for dt in [n, n + timedelta(
+            days=-1)]]
+
+        one = {
+            "yyyymmdd_yyyy": expectedY[0],
+            "yyyymmdd_mm": expectedM[0],
+            "yyyymmdd_dd": expectedD[0],
+            "yyyymmdd_yy": expectedYY[0],
+        }
+
+        two = {
+            "yyyymmdd_yyyy": expectedY[1],
+            "yyyymmdd_mm": expectedM[1],
+            "yyyymmdd_dd": expectedD[1],
+            "yyyymmdd_yy": expectedYY[1],
+        }
+
         template = {"folder": "afolder",
                     "foo": "bar_{folder}_{filename}",
                     "yyyymmdd": [-1, 0]}
+
+
         result = BqQueryTemplatingFileLoader\
                 .explodeTemplateVarsArray([template],
                 'afolder', 'afile', {"dataset": "adataset",
@@ -204,11 +229,11 @@ class Test(unittest.TestCase):
         expected = [{'filename': 'afile', 'folder': 'afolder', 'dataset':
                     'adataset', 'yyyymmdd': expectedDt[1], 'foo':
                     'bar_afolder_afile', "table": "afile",
-                     "project": "aproject"},
+                     "project": "aproject", **two},
                     {'filename': 'afile', 'folder': 'afolder', 'dataset':
                     'adataset', 'yyyymmdd': expectedDt[0], 'foo':
                         'bar_afolder_afile', "table": "afile",
-                     "project": "aproject"}]
+                     "project": "aproject", **one}]
         self.assertEqual(result, expected)
 
     @mock.patch('google.cloud.bigquery.Client')

@@ -1,0 +1,2 @@
+select 'foo', '{yyyymm}', '{yyyymm_yyyy}-{yyyymm_mm}', '{yyyymmdd_dd}', 
+'{yyyymmddhh_yyyy}-{yyyymmddhh_mm}-{yyyymmddhh_dd}-{yyyymmddhh_hh}'

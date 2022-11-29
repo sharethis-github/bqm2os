@@ -1,0 +1,5 @@
+#standardSQL
+
+select * from {project}.{dataset}.a
+union all
+select * from {project}.{dataset}.b
